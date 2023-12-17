@@ -5,14 +5,14 @@
 - swift.org: https://www.swift.org/
 - apple swift resources : https://developer.apple.com/kr/swift/resources/
 - The Swift Programming Language (영어) : https://docs.swift.org/swift-book/documentation/the-swift-programming-language/
-   . 한글번역:  https://bbiguduk.gitbook.io/swift/
+ + 한글번역:  https://bbiguduk.gitbook.io/swift/
 - Swift Standard Library: https://developer.apple.com/documentation/swift/swift-standard-library
 - Apple 디자인 리소스 : https://developer.apple.com/kr/design/resources/
- . Sample Apps Tutorials :https://developer.apple.com/tutorials/sample-apps
- . Swift UI 샘플 앱 : https://developer.apple.com/tutorials/app-dev-training
- . iOS용 앱 개발하기 (14시간15분) : https://developer.apple.com/tutorials/app-dev-training
- . SwiftUI 소개 (4시간25분) : https://developer.apple.com/tutorials/swiftui
- . Mac Catalyst로 Mac에 iPad앱 구현하기 (3시간25분) : https://developer.apple.com/tutorials/mac-catalyst/
+ + Sample Apps Tutorials :https://developer.apple.com/tutorials/sample-apps
+ + Swift UI 샘플 앱 : https://developer.apple.com/tutorials/app-dev-training
+ + iOS용 앱 개발하기 (14시간15분) : https://developer.apple.com/tutorials/app-dev-training
+ + SwiftUI 소개 (4시간25분) : https://developer.apple.com/tutorials/swiftui
+ + Mac Catalyst로 Mac에 iPad앱 구현하기 (3시간25분) : https://developer.apple.com/tutorials/mac-catalyst/
 
 ## Chapter 01. 시작하기
 
