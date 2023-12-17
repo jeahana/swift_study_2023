@@ -1,6 +1,18 @@
-# swift_study_2023
-
 # 핵심만 골라배우는 Swift(2023)
+
+## swift 정보
+
+- swift.org: https://www.swift.org/
+- apple swift resources : https://developer.apple.com/kr/swift/resources/
+- The Swift Programming Language (영어) : https://docs.swift.org/swift-book/documentation/the-swift-programming-language/
+   . 한글번역:  https://bbiguduk.gitbook.io/swift/
+- Swift Standard Library: https://developer.apple.com/documentation/swift/swift-standard-library
+- Apple 디자인 리소스 : https://developer.apple.com/kr/design/resources/
+ . Sample Apps Tutorials :https://developer.apple.com/tutorials/sample-apps
+ . Swift UI 샘플 앱 : https://developer.apple.com/tutorials/app-dev-training
+ . iOS용 앱 개발하기 (14시간15분) : https://developer.apple.com/tutorials/app-dev-training
+ . SwiftUI 소개 (4시간25분) : https://developer.apple.com/tutorials/swiftui
+ . Mac Catalyst로 Mac에 iPad앱 구현하기 (3시간25분) : https://developer.apple.com/tutorials/mac-catalyst/
 
 ## Chapter 01. 시작하기
 
@@ -512,21 +524,402 @@ let myValue: Double = 3.0
 print(myValue.squared)
 ```
 
------------------------------
-------- 5(42), 8(69), 9(84), 11(106)
-
-
-
 ## Chapter 12. 스위프트 구조체와 열거형
---- 114
+
+### 12.2 값 타입 vs. 참조 타입
+
+1. 구조체 인스턴스의 타입은 값 타입이고, 클래스의 인스턴스의 타입은 참조 타입이다.
+- 구조체 인스턴스가 복사되거나 메서드에 전달될 때 인스턴스의 실제 복사본이 생성되면서 원본 객체가 가지고 있던 모든 데이터를 그대로 복사해서 갖게 된다.
+- 각각의 복사본은 자신만의 데이터를 가질 수 있다. 구조체로 된 인스턴스는 어떤 하나의 인스턴스를 변경해도 다른 복사본에 영향을 미치지 않는다.
+```swift
+struct SampleStruct {
+    var name: String
+    init(name: String) {
+        self.name = name
+    }
+}
+
+let myStruct1 = SampleStruct(name: "Mark")
+var myStruct2 = myStruct1
+myStuct2.name = "David"
+
+print(myStruct1.name) // Mark
+print(myStruct2.name) // David
+```
+
+2. 구조체 특징
+- 상속이나 하위 클래스를 지원하지 않는다.
+- 클래스와 다른게 소멸자 메서드(deinit)를 포함할 수 없다.
+- 런타임에서 인스턴스의 유형을 식별할 수 없다.
+```swift
+print(latte is Coffee) // is: 타입 확인 연산자
+```
+
+### 12.3 구조체와 클래스는 언제 사용하는가?
+
+- 일반적으로 구조체가 클래스보다 효율적이고 멀티 스레드 코드를 사용하는 데 더 안정적이기 때문에 가능하다면 구조체를 권한다.
+- 하지만, 상속이 필요하거나 데이터가 캡슐화된 하나의 인스턴스가 필요할 때는 클래스를 사용해야 한다. (익스텐션 기능은 사용이 가능함.)
+- 또는, 인스턴스가 소멸될 때 리소스를 확보하기 위한 작업이 필요할 때도 클래스를 사용해야 한다.
+
+### 12.4 열거형 개요
+
+- 일반적으로 enum이라고 하는 열거형(enumeration)은 미리 정의된 값 집합으로 구성된 사용자 지정 데이터 유형을 만드는 데 사용된다.
+- 열거형 내의 개별 케이스에는 연결된 값이 있을 수도 있다.
+```swift
+enum Temperature {
+    case hot
+    case warn
+    case cold(centigrade: Int)
+}
+
+func displayTemp(temp: Temperature) {
+    swith temp {
+        case .hot:
+            print("It is hot.")
+        case .warn:
+            print("It is warn.")
+        case .cold(let centigrade) where centigrade <= 0:
+            print("Ice waring: \(centigrade) degrees.")
+        case .cold:
+            print("It is cold but not freezing.")
+    }
+}
+```
+
 ## Chapter 13. 스위프트 프로퍼티 래퍼
---- 121
+
+- 프로퍼티 래퍼는 클래스와 구조체 구현부에 게터, 세터, 연산 프로퍼티(computed property) 코드의 중복을 줄이는 방법을 제공한다.
+
+```swift
+// struct
+struct Address {
+    private var cityname: String = ""
+    var city: String {
+        get {cityname}
+        set {cityname = newValue.uppercased() }
+    }
+}
+
+var address = Address()
+address.city = "London"
+print(address.city) // output: LONDON
+```
+
+```swift
+// propertyWrapper - example
+@propertyWrapper // 1. 선언. propertyWrapper
+struct FixCase {
+    private(set) var value: String = ""
+
+    var wrappedValue: String {  // 2. wrappedValue 가져야 함.
+        get { value }
+        set { value = newValue.uppercased() }
+    }
+
+    init(wrappedValue initialValue: String) { // 3. 초기값이 전달되는 초기화 메서드. (선택 사항)
+        self.wrapedValue = initialValue
+    }
+}
+
+struct Contact {
+    @FixCase var name: String
+    @FixCase var city: String
+    @FixCase var country: String
+}
+```
+
+```swift
+@propertyWrapper
+struct MinMaxVal {
+    var value: Int
+    let min : Int
+    let max: Int
+
+    init(wrappedValue: Int, min: Int, max: Int) {
+        value = wrappedValue
+        self.min = min
+        self.max = max
+    }
+
+    var wrappedValue: Int {
+        get { value }
+        set { 
+            if newValue > max {
+                value = max
+            } else if newValue < min {
+                value = min
+            } else {
+                value = newValue 
+            }
+        }
+    }
+}
+
+struct Demo {
+    @MinMaxVal(min: 100, max: 200) var value: Int = 100
+}
+
+var demo = Demo()
+demo.value = 250
+print(demo.value)
+```
+
+```swift
+// using comparable protocal for any Type(String, Charater, Int, Date, DateInterval, ... etc)
+@propertyWrapper
+struct MinMaxVal<V: Comparable> {
+    var value: V
+    let min : V
+    let max: V
+
+    init(wrappedValue: V, min: V, max: V) {
+        value = wrappedValue
+        self.min = min
+        self.max = max
+    }
+
+    var wrappedValue: V {
+        get { value }
+        set { 
+            if newValue > max {
+                value = max
+            } else if newValue < min {
+                value = min
+            } else {
+                value = newValue 
+            }
+        }
+    }
+}
+
+```
+
 ## Chapter 14. 스위프트의 배열과 딕셔너리 컬렉션으로 작업하기
---- 132
+
+- 스위프트에서의 컬렉션은 가변형(mutable)과 불변형(immutable)이 있다.
+- 불편형 컬렉션을 만들고 싶다면 컬렉션을 생성할 때 상수에 할당한다. 반면, 변수에 할당했다면 가변형이 된다.
+```swift
+let treeArray = ["Pine", "Oak", "Yew"] // immatable
+var treeArray1 = ["Pine", "Oak", "Yew"] // matable
+var treeArray2: [String] = ["Pine", "Oak", "Yew"] // matable
+var treeArray3: [String]() // 빈배열
+var nameArray = [String](repeating: "My String", count: 10) // 10개항목을 "My String"으로 초기화된 배열 생성
+
+let firstArray = ["Red", "Green", "Blue"]
+let secondArray = ["Indigo", "Violet"]
+let mergeArray = firstArray + secondArray
+```
+
+```swift
+// 섞기
+let shuffedTrees = treeArray.shuffled()
+// 무작위로 가져오기
+let randomTree = treeArray.randomElement()
+
+// 항목추가(append)
+treeArray.append("Redwood")
+treeArray += ["Redwood"]
+treeArray += ["Redwood", "Maple", "Birch"]
+
+// insert
+treeArray.insert("Maple", at: 0)
+
+// remove
+treeArray.remove(at: 2)
+
+// remove at Last
+treeArray.removeLast()
+```
+
+```swift
+// 배열 반복하기
+let treeArray = ["Pine", "Oak", "Yew", "Maple", "Birch", "Myrtle"]
+for tree in treeArray {
+    print(tree)
+}
+
+treeArray.forEach { tree in
+    print(tree)
+}
+
+treeArray.forEach {
+    print($0)
+}
+```
+
+### 14.4 타입이 혼한된 배열 생성하기
+
+- 스위프트의 Any는 특별한 타입으로, 지정된 클래스 타입이 아닌 객체를 참조하는 데 사용된다. 따라서 Any 객체 타입 배열은 여러 타입의 항목을 담을 수 있다.
+```swift
+let mixedArray: [Any] = ["A String", 432, 3.14]
+
+for object in mixedArray {
+    print(object as! Int * 10) // downcast 처리하면, 컴파일 오류는 잡히지만* 연산에서 String 경우는 Runtime 오류가 발생한다.
+}
+```
+
+### 14.5 스위프트 딕셔너리 컬렉션
+
+- 딕셔너리는 키-값 쌍의 형태로 데이터를 저장하고 관리한다.
+- 현재(15.x 버전) 딕셔너리 키는 String, Int, Double, Bool 데이터 타입만 사용할 수 있다.
+```swift
+var 변수명: [키 타입: 값 타입] = [키1: 값1, 키2: 값2 ...]
+```
+
+```swift
+var sampleDic = ["1": "val_1", 
+                 "2": "val_2"]
+// 빈 dictionary
+var emptyDic: [Int: String]()
+```
+
+### 14.7 시퀀스 기반의 딕셔너리 초기화
+```swift
+let keys = ["1", "2"]
+let values = ["val_1", "val_2"]
+let sampleDic = Dictionary(uniqueKeysWithValues: zip(keys, values))
+
+// 1 부터 시작하는 키로 지정
+let sampleDic = Dictionary(uniqueKeysWithValues: zip(1..., values))
+```
+
+```swift
+print(bookDict.count) // get count
+print(bookDict["key1"]) // get Value
+print(bookDict["key1", default: "Book not found"]) // default value
+
+bookDict["key1"] = "new Value" // update value
+bookDict.updateValue("new Value", forKey: "key1") // update value
+
+// add new key, value
+bookDict["new_key"] = "new value"
+
+// remove key, value
+bookDict["key1"] = nil
+bookDict.removeValue(forKey: "key1")
+
+// loop
+for (bookId, title) in bookDict {
+    print("Book ID: \(bookId) Title: \(title)")
+}
+```
+
 ## Chapter 15. 스위프트 5의 에러 핸들링 이해하기
---- 139
+
+1. 에러를 처리하는 두 단계
+- 1) 에러를 발생(throwing) 하는 것.
+- 2) 메서드가 던지(throwing) 에러를 잡아서 처리하는 것.
+
+```swift
+let connectionOK = true
+let connectionSpeed = 30.00
+let fileFound = false
+enum FileTransferError: Error { // using Error protocal
+    case noConnection
+    case lowBandwith
+    case fileNotFound
+}
+
+func transferFile() throws -> Bool {
+    // guard 구문은 각 조건이 참인지 거짓인지 검사한다. 만약 거짓이라면 else 구분에 포함된 코드가 실행된다.
+    guard connectionOk else {
+        throw FileTransferError.noConnection
+    }
+
+    guard connectionSpeed else {
+        throw FileTransferError.lowBandwidth
+    }
+
+    guard fileFound else {
+        throw FileTransferError.fileNotFound
+    }
+
+    return true
+}
+```
+
+### 15.4 스로잉 메서드와 함수 호출하기
+
+- 메서드가 에러를 던지도록 선언했다면 일반적인 방법으로 호출할 수 없다. try 구분을 붙여야 한다.
+```swift
+func sendFile() -> String {
+    do {
+        try fileTransfer()
+    } catch FileTransferError.noConnection {
+        return ("No Network Connection")
+    } catch FileTransferError.lowBandwidth {
+        return ("File Transfer Speed too Low")
+    } catch FileTransferError.fileNotFound {
+        return ("File not Found")
+    } catch { // catch all
+        return ("Unknown error")
+    }
+
+    return("Successful transfer")
+}
+
+func sendFile2() -> String {
+    do {
+        try fileTransfer()
+    } catch FileTransferError.noConnection, FileTransferError.lowBandwidth {
+        return ("Connection problem")
+    } catch FileTransferError.fileNotFound {
+        return ("File not Found")
+    } catch { // catch all
+        return ("Unknown error")
+    }
+
+    return("Successful transfer")
+}
+```
+
+```swift
+// 에러 객체에 접근하기
+do {
+    try filemgr.createDirectory(atPath: newDir, withIntermediateDirectories: true, attributes: nil)
+} catch let error {
+    print("Error: \(error.localizedDescription)")
+}
+```
+
+### 15.6 에러 캐칭 비활성화 하기
+
+- try! 구분을 사용하면 do-catch 구문 내에서 메서드가 호출되도록 감싸지 않아도 스로잉 메서드가 강제로 실행된다.
+- 이 방법은 런타임 에러가 발생할 수 있으므로 권장하지 않는다.
+```swift
+try! fileTransfer
+```
+
+### 15.7 defer 구분 사용하기
+
+- defer 구문은 메서드가 결과를 반환하기 직전에 실행되어야 하는 일련의 코드를 지정한다. 리턴 전에 defer 구문이 수행된다.
+```swift
+func sendFile() -> String {    
+    defer {
+        removeTmpFiles()
+        closeConnection()
+    }
+
+    do {
+        try fileTransfer()
+    } catch FileTransferError.noConnection, FileTransferError.lowBandwidth {
+        return ("Connection problem")
+    } catch FileTransferError.fileNotFound {
+        return ("File not Found")
+    } catch { // catch all
+        return ("Unknown error")
+    }
+
+    return("Successful transfer")
+}
+```
 
 
+---------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------
+
+pdf 166
 
 ## Chapter 16. SwiftUI 개요
 --- 144
@@ -689,3 +1082,5 @@ Swift 프로그래밍을 배우기 위한 몇 가지 추천 사이트는 다음�
 (3) 개인적으로 추천하는 도움이 되는 iOS 공부 자료 | Joohee Kim's Blog. https://bing.com/search?q=Swift+%ed%94%84%eb%a1%9c%ea%b7%b8%eb%9e%98%eb%b0%8d+%ed%95%99%ec%8a%b5+%ec%82%ac%ec%9d%b4%ed%8a%b8+%ec%b6%94%ec%b2%9c.
 (4) [Site] 코딩테스트 준비, 알고리즘 공부 추천사이트 - ‍ .... https://lxxyeon.tistory.com/80.
 (5) ko.wikipedia.org. https://ko.wikipedia.org/wiki/%EC%8A%A4%EC%9C%84%ED%94%84%ED%8A%B8_(%ED%94%84%EB%A1%9C%EA%B7%B8%EB%9E%98%EB%B0%8D_%EC%96%B8%EC%96%B4).
+
+
