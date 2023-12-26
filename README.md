@@ -5,14 +5,14 @@
 - swift.org: https://www.swift.org/
 - apple swift resources : https://developer.apple.com/kr/swift/resources/
 - The Swift Programming Language (영어) : https://docs.swift.org/swift-book/documentation/the-swift-programming-language/
- + 한글번역:  https://bbiguduk.gitbook.io/swift/
+   . 한글번역:  https://bbiguduk.gitbook.io/swift/
 - Swift Standard Library: https://developer.apple.com/documentation/swift/swift-standard-library
 - Apple 디자인 리소스 : https://developer.apple.com/kr/design/resources/
- + Sample Apps Tutorials :https://developer.apple.com/tutorials/sample-apps
- + Swift UI 샘플 앱 : https://developer.apple.com/tutorials/app-dev-training
- + iOS용 앱 개발하기 (14시간15분) : https://developer.apple.com/tutorials/app-dev-training
- + SwiftUI 소개 (4시간25분) : https://developer.apple.com/tutorials/swiftui
- + Mac Catalyst로 Mac에 iPad앱 구현하기 (3시간25분) : https://developer.apple.com/tutorials/mac-catalyst/
+ . Sample Apps Tutorials :https://developer.apple.com/tutorials/sample-apps
+ . Swift UI 샘플 앱 : https://developer.apple.com/tutorials/app-dev-training
+ . iOS용 앱 개발하기 (14시간15분) : https://developer.apple.com/tutorials/app-dev-training
+ . SwiftUI 소개 (4시간25분) : https://developer.apple.com/tutorials/swiftui
+ . Mac Catalyst로 Mac에 iPad앱 구현하기 (3시간25분) : https://developer.apple.com/tutorials/mac-catalyst/
 
 ## Chapter 01. 시작하기
 
@@ -915,26 +915,24 @@ func sendFile() -> String {
 ```
 
 
----------------------------------------------------------------------------------------
----------------------------------------------------------------------------------------
----------------------------------------------------------------------------------------
 
 
 ## Chapter 16. SwiftUI 개요
 
-### 16. 1 Swift 이전 개발 방식.
-  1) UIKit, 인터페이스 빌더(스토리보드 포함).
-  2) 컴포넌트 이벤트 처리.
-  3) 시뮬레이션.
-
-### 16.2 SwiftUI의 선언적 구문
-  1) 구문을 이용하여 화면을 기술. (컴포넌트, 레이아웃매니저, 속성)
-    -> 레이아웃의 위치, 컨스트레인트, 레더링은 SwiftUI가 자동 처리.
-  2) 프리뷰 캔버스, 라이브 프리뷰 코드 지원.  
-    
---- 144
 ## Chapter 17. SwiftUI모드로 Xcode 이용하기
---- 167
+
+### 17.17 요약
+
+- 앱의 사용자 인터페이스를 만들 때 UIKit 스토리보드를 이용할 것인지, 아니면 SwiftUI를 이용할 것이지 결정할 수 있는 옵션을 준다.(?)
+- SwiftUI모드에서 앱 개발과 관련된 대부분의 작업은 코드 에디터와 프리뷰 캔버스에서 이뤄진다.
+- 새로운 뷰에 사용자 인터페이스 레이아웃을 추가하고 구성하는 방법으로 코드 에디터에 직접 타이핑하거나, 라이브러리에서 원하는 항목을 에디터나 프리뷰 캔버스로 드래그 앤 드롭하는 방법이 있다.
+
+-- pdf file - 193
+
+---------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------
+
 ## Chapter 18. SwiftUI 아키텍처
 --- 170
 ## Chapter 19. 기본 SwiftUI 프로젝트 분석
