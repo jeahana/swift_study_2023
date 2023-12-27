@@ -1,3 +1,5 @@
+# swift_study_2023
+
 # 핵심만 골라배우는 Swift(2023)
 
 ## swift 정보
@@ -524,395 +526,19 @@ let myValue: Double = 3.0
 print(myValue.squared)
 ```
 
+-----------------------------
+------- 5(42), 8(69), 9(84), 11(106)
+
+
+
 ## Chapter 12. 스위프트 구조체와 열거형
-
-### 12.2 값 타입 vs. 참조 타입
-
-1. 구조체 인스턴스의 타입은 값 타입이고, 클래스의 인스턴스의 타입은 참조 타입이다.
-- 구조체 인스턴스가 복사되거나 메서드에 전달될 때 인스턴스의 실제 복사본이 생성되면서 원본 객체가 가지고 있던 모든 데이터를 그대로 복사해서 갖게 된다.
-- 각각의 복사본은 자신만의 데이터를 가질 수 있다. 구조체로 된 인스턴스는 어떤 하나의 인스턴스를 변경해도 다른 복사본에 영향을 미치지 않는다.
-```swift
-struct SampleStruct {
-    var name: String
-    init(name: String) {
-        self.name = name
-    }
-}
-
-let myStruct1 = SampleStruct(name: "Mark")
-var myStruct2 = myStruct1
-myStuct2.name = "David"
-
-print(myStruct1.name) // Mark
-print(myStruct2.name) // David
-```
-
-2. 구조체 특징
-- 상속이나 하위 클래스를 지원하지 않는다.
-- 클래스와 다른게 소멸자 메서드(deinit)를 포함할 수 없다.
-- 런타임에서 인스턴스의 유형을 식별할 수 없다.
-```swift
-print(latte is Coffee) // is: 타입 확인 연산자
-```
-
-### 12.3 구조체와 클래스는 언제 사용하는가?
-
-- 일반적으로 구조체가 클래스보다 효율적이고 멀티 스레드 코드를 사용하는 데 더 안정적이기 때문에 가능하다면 구조체를 권한다.
-- 하지만, 상속이 필요하거나 데이터가 캡슐화된 하나의 인스턴스가 필요할 때는 클래스를 사용해야 한다. (익스텐션 기능은 사용이 가능함.)
-- 또는, 인스턴스가 소멸될 때 리소스를 확보하기 위한 작업이 필요할 때도 클래스를 사용해야 한다.
-
-### 12.4 열거형 개요
-
-- 일반적으로 enum이라고 하는 열거형(enumeration)은 미리 정의된 값 집합으로 구성된 사용자 지정 데이터 유형을 만드는 데 사용된다.
-- 열거형 내의 개별 케이스에는 연결된 값이 있을 수도 있다.
-```swift
-enum Temperature {
-    case hot
-    case warn
-    case cold(centigrade: Int)
-}
-
-func displayTemp(temp: Temperature) {
-    swith temp {
-        case .hot:
-            print("It is hot.")
-        case .warn:
-            print("It is warn.")
-        case .cold(let centigrade) where centigrade <= 0:
-            print("Ice waring: \(centigrade) degrees.")
-        case .cold:
-            print("It is cold but not freezing.")
-    }
-}
-```
-
+--- 114
 ## Chapter 13. 스위프트 프로퍼티 래퍼
-
-- 프로퍼티 래퍼는 클래스와 구조체 구현부에 게터, 세터, 연산 프로퍼티(computed property) 코드의 중복을 줄이는 방법을 제공한다.
-
-```swift
-// struct
-struct Address {
-    private var cityname: String = ""
-    var city: String {
-        get {cityname}
-        set {cityname = newValue.uppercased() }
-    }
-}
-
-var address = Address()
-address.city = "London"
-print(address.city) // output: LONDON
-```
-
-```swift
-// propertyWrapper - example
-@propertyWrapper // 1. 선언. propertyWrapper
-struct FixCase {
-    private(set) var value: String = ""
-
-    var wrappedValue: String {  // 2. wrappedValue 가져야 함.
-        get { value }
-        set { value = newValue.uppercased() }
-    }
-
-    init(wrappedValue initialValue: String) { // 3. 초기값이 전달되는 초기화 메서드. (선택 사항)
-        self.wrapedValue = initialValue
-    }
-}
-
-struct Contact {
-    @FixCase var name: String
-    @FixCase var city: String
-    @FixCase var country: String
-}
-```
-
-```swift
-@propertyWrapper
-struct MinMaxVal {
-    var value: Int
-    let min : Int
-    let max: Int
-
-    init(wrappedValue: Int, min: Int, max: Int) {
-        value = wrappedValue
-        self.min = min
-        self.max = max
-    }
-
-    var wrappedValue: Int {
-        get { value }
-        set { 
-            if newValue > max {
-                value = max
-            } else if newValue < min {
-                value = min
-            } else {
-                value = newValue 
-            }
-        }
-    }
-}
-
-struct Demo {
-    @MinMaxVal(min: 100, max: 200) var value: Int = 100
-}
-
-var demo = Demo()
-demo.value = 250
-print(demo.value)
-```
-
-```swift
-// using comparable protocal for any Type(String, Charater, Int, Date, DateInterval, ... etc)
-@propertyWrapper
-struct MinMaxVal<V: Comparable> {
-    var value: V
-    let min : V
-    let max: V
-
-    init(wrappedValue: V, min: V, max: V) {
-        value = wrappedValue
-        self.min = min
-        self.max = max
-    }
-
-    var wrappedValue: V {
-        get { value }
-        set { 
-            if newValue > max {
-                value = max
-            } else if newValue < min {
-                value = min
-            } else {
-                value = newValue 
-            }
-        }
-    }
-}
-
-```
-
+--- 121
 ## Chapter 14. 스위프트의 배열과 딕셔너리 컬렉션으로 작업하기
-
-- 스위프트에서의 컬렉션은 가변형(mutable)과 불변형(immutable)이 있다.
-- 불편형 컬렉션을 만들고 싶다면 컬렉션을 생성할 때 상수에 할당한다. 반면, 변수에 할당했다면 가변형이 된다.
-```swift
-let treeArray = ["Pine", "Oak", "Yew"] // immatable
-var treeArray1 = ["Pine", "Oak", "Yew"] // matable
-var treeArray2: [String] = ["Pine", "Oak", "Yew"] // matable
-var treeArray3: [String]() // 빈배열
-var nameArray = [String](repeating: "My String", count: 10) // 10개항목을 "My String"으로 초기화된 배열 생성
-
-let firstArray = ["Red", "Green", "Blue"]
-let secondArray = ["Indigo", "Violet"]
-let mergeArray = firstArray + secondArray
-```
-
-```swift
-// 섞기
-let shuffedTrees = treeArray.shuffled()
-// 무작위로 가져오기
-let randomTree = treeArray.randomElement()
-
-// 항목추가(append)
-treeArray.append("Redwood")
-treeArray += ["Redwood"]
-treeArray += ["Redwood", "Maple", "Birch"]
-
-// insert
-treeArray.insert("Maple", at: 0)
-
-// remove
-treeArray.remove(at: 2)
-
-// remove at Last
-treeArray.removeLast()
-```
-
-```swift
-// 배열 반복하기
-let treeArray = ["Pine", "Oak", "Yew", "Maple", "Birch", "Myrtle"]
-for tree in treeArray {
-    print(tree)
-}
-
-treeArray.forEach { tree in
-    print(tree)
-}
-
-treeArray.forEach {
-    print($0)
-}
-```
-
-### 14.4 타입이 혼한된 배열 생성하기
-
-- 스위프트의 Any는 특별한 타입으로, 지정된 클래스 타입이 아닌 객체를 참조하는 데 사용된다. 따라서 Any 객체 타입 배열은 여러 타입의 항목을 담을 수 있다.
-```swift
-let mixedArray: [Any] = ["A String", 432, 3.14]
-
-for object in mixedArray {
-    print(object as! Int * 10) // downcast 처리하면, 컴파일 오류는 잡히지만* 연산에서 String 경우는 Runtime 오류가 발생한다.
-}
-```
-
-### 14.5 스위프트 딕셔너리 컬렉션
-
-- 딕셔너리는 키-값 쌍의 형태로 데이터를 저장하고 관리한다.
-- 현재(15.x 버전) 딕셔너리 키는 String, Int, Double, Bool 데이터 타입만 사용할 수 있다.
-```swift
-var 변수명: [키 타입: 값 타입] = [키1: 값1, 키2: 값2 ...]
-```
-
-```swift
-var sampleDic = ["1": "val_1", 
-                 "2": "val_2"]
-// 빈 dictionary
-var emptyDic: [Int: String]()
-```
-
-### 14.7 시퀀스 기반의 딕셔너리 초기화
-```swift
-let keys = ["1", "2"]
-let values = ["val_1", "val_2"]
-let sampleDic = Dictionary(uniqueKeysWithValues: zip(keys, values))
-
-// 1 부터 시작하는 키로 지정
-let sampleDic = Dictionary(uniqueKeysWithValues: zip(1..., values))
-```
-
-```swift
-print(bookDict.count) // get count
-print(bookDict["key1"]) // get Value
-print(bookDict["key1", default: "Book not found"]) // default value
-
-bookDict["key1"] = "new Value" // update value
-bookDict.updateValue("new Value", forKey: "key1") // update value
-
-// add new key, value
-bookDict["new_key"] = "new value"
-
-// remove key, value
-bookDict["key1"] = nil
-bookDict.removeValue(forKey: "key1")
-
-// loop
-for (bookId, title) in bookDict {
-    print("Book ID: \(bookId) Title: \(title)")
-}
-```
-
+--- 132
 ## Chapter 15. 스위프트 5의 에러 핸들링 이해하기
-
-1. 에러를 처리하는 두 단계
-- 1) 에러를 발생(throwing) 하는 것.
-- 2) 메서드가 던지(throwing) 에러를 잡아서 처리하는 것.
-
-```swift
-let connectionOK = true
-let connectionSpeed = 30.00
-let fileFound = false
-enum FileTransferError: Error { // using Error protocal
-    case noConnection
-    case lowBandwith
-    case fileNotFound
-}
-
-func transferFile() throws -> Bool {
-    // guard 구문은 각 조건이 참인지 거짓인지 검사한다. 만약 거짓이라면 else 구분에 포함된 코드가 실행된다.
-    guard connectionOk else {
-        throw FileTransferError.noConnection
-    }
-
-    guard connectionSpeed else {
-        throw FileTransferError.lowBandwidth
-    }
-
-    guard fileFound else {
-        throw FileTransferError.fileNotFound
-    }
-
-    return true
-}
-```
-
-### 15.4 스로잉 메서드와 함수 호출하기
-
-- 메서드가 에러를 던지도록 선언했다면 일반적인 방법으로 호출할 수 없다. try 구분을 붙여야 한다.
-```swift
-func sendFile() -> String {
-    do {
-        try fileTransfer()
-    } catch FileTransferError.noConnection {
-        return ("No Network Connection")
-    } catch FileTransferError.lowBandwidth {
-        return ("File Transfer Speed too Low")
-    } catch FileTransferError.fileNotFound {
-        return ("File not Found")
-    } catch { // catch all
-        return ("Unknown error")
-    }
-
-    return("Successful transfer")
-}
-
-func sendFile2() -> String {
-    do {
-        try fileTransfer()
-    } catch FileTransferError.noConnection, FileTransferError.lowBandwidth {
-        return ("Connection problem")
-    } catch FileTransferError.fileNotFound {
-        return ("File not Found")
-    } catch { // catch all
-        return ("Unknown error")
-    }
-
-    return("Successful transfer")
-}
-```
-
-```swift
-// 에러 객체에 접근하기
-do {
-    try filemgr.createDirectory(atPath: newDir, withIntermediateDirectories: true, attributes: nil)
-} catch let error {
-    print("Error: \(error.localizedDescription)")
-}
-```
-
-### 15.6 에러 캐칭 비활성화 하기
-
-- try! 구분을 사용하면 do-catch 구문 내에서 메서드가 호출되도록 감싸지 않아도 스로잉 메서드가 강제로 실행된다.
-- 이 방법은 런타임 에러가 발생할 수 있으므로 권장하지 않는다.
-```swift
-try! fileTransfer
-```
-
-### 15.7 defer 구분 사용하기
-
-- defer 구문은 메서드가 결과를 반환하기 직전에 실행되어야 하는 일련의 코드를 지정한다. 리턴 전에 defer 구문이 수행된다.
-```swift
-func sendFile() -> String {    
-    defer {
-        removeTmpFiles()
-        closeConnection()
-    }
-
-    do {
-        try fileTransfer()
-    } catch FileTransferError.noConnection, FileTransferError.lowBandwidth {
-        return ("Connection problem")
-    } catch FileTransferError.fileNotFound {
-        return ("File not Found")
-    } catch { // catch all
-        return ("Unknown error")
-    }
-
-    return("Successful transfer")
-}
-```
+--- 139
 
 ## Chapter 16. SwiftUI 개요
 
@@ -937,20 +563,151 @@ func sendFile() -> String {
 - SwiftUI모드에서 앱 개발과 관련된 대부분의 작업은 코드 에디터와 프리뷰 캔버스에서 이뤄진다.
 - 새로운 뷰에 사용자 인터페이스 레이아웃을 추가하고 구성하는 방법으로 코드 에디터에 직접 타이핑하거나, 라이브러리에서 원하는 항목을 에디터나 프리뷰 캔버스로 드래그 앤 드롭하는 방법이 있다.
 
--- pdf file - 193
-
----------------------------------------------------------------------------------------
----------------------------------------------------------------------------------------
----------------------------------------------------------------------------------------
 
 ## Chapter 18. SwiftUI 아키텍처
---- 170
-## Chapter 19. 기본 SwiftUI 프로젝트 분석
---- 172
 
+- 완성된 SwiftUI 앱은 계층적 방식으로 조합된 여러 컴포넌트로 구성된다.
+- Scene은 WindowGroup과 같은 SwiftUI 기본 Scense 타입 중 하나에서 파생되거나 사용자 정의로 구축될 수 있다.
+- iOS 또는 watchOS에서 애플리케이션은 일반적으로 전체 디스플레이를 차지하는 창 형태를 취하는 단일 Scene을 포함한다.
+  + 하지만, maxOS 또는 iPadOS 시스템에서 응용 프로그램은 여러 Scene 인터스턴스로 구성될 수 있으며, 
+  + 종종 동시에 표시되거나 탭 인터페이스와 함께 그룹화될 수 있는 별도의 창으로 표시된다.
+
+``` java
+App                 // SwiftUI 내 최상위 요소. 1) 각 인스턴스의 시작 및 생명 주기를 처리한다. 2) Scense 관리.
+    .Scene          // 각 SwiftUI는 하나 이상의 Scene 포함. Scense은 UI의 섹션 또는 영역을 나타낸다.
+        .View       // View는 버튼, 레이블, 텍스트 필드와 같은 UI의 시각적 요소를 구성하는 기본적인 빌딩 블록이다.
+        .View(VStack)
+            .View(Button)
+            .View(TextView)
+    .Scene
+        .View
+        .View
+
+```
+
+## Chapter 19. 기본 SwiftUI 프로젝트 분석
+
+- Xcode 프로젝트 구조의 각 요소에 대해서 분석 (Multiplatform App 템플릿으로 생성한 DemoProject 샘플)
+
+1. 프로젝트App.swift와 ContextView.swift
+```swift
+// DemoProjectApp.swift
+import SwiftUI
+
+@main                        // main 선언 
+struct DemoProjectApp: App { // - App
+    var body: some Scene {   //   + Scene 
+        WindowGroup {        //     + WindowGroup
+            ContentView()    //       + View
+        }
+    }
+}
+```
+
+```swift
+// ContentView.swift
+import SwiftUI
+
+struct ContentView: View {               // - View
+    var body: some View {                //   + View
+        VStack {                         //     + VStack
+            Image(systemName: "globe")   //       + Image
+                .imageScale(.large)
+                .foregroundColor(.accentColor)
+            Text("Hello, world!")         //      + Text
+        }
+        .padding()
+    }
+}
+
+struct ContentView_Previews: PreviewProvider {
+    static var previews: some View {
+        ContentView()
+    }
+}
+```
+
+2. Assets.xcassets
+ -  Assets.xcassets 폴더에는 이미지, 아이콘 및 색상과 같은 앱에서 사용하는 리소스를 저장하는 데 사용하는 애셋 카탈로그 포함.
+
+3. DemoProject.entitlements
+- entitlements 파일은 앱 내에서 특정 iOS 기능에 대한 지원을 활성화하는 데 사용된다.
+  + 앱에서 iCloud 저장소 또는 디바이스 마이크에 접근해야 하거나 시리를 통해 음성 제어를 통합하려는 경우 이 파일 내에서 권한을 먼저 활성화해야 한다.
+
+4. Preview Content
+- 프리뷰 애셋 폴더에는 개발 중에 앱을 미리 볼 때 필요하지만 완성된 앱에서는 필요하지 않은 자산 및 데이터가 포함되어 있다.
+- 앱 스토어에 제출하기 위해 앱을 패키징할 준비가 되면 Xcode는 불필요한 공각을 차지하지 않도록 이러 자산을 배달 아카이브에서 제거한다.
 
 
 ## Chapter 20. SwiftUI로 커스텀 뷰 생성하기
+
+SwiftUI를 이용하여 앱 개발을 배우는 과정 중에서 중요한 한 가지는 내장된 SwiftUI 뷰를 사용함과 동시에 자신만의 커스텀 뷰를 만들어 자신이 원하는 UI 레이아웃을 어떻게 선언하는지를 배우는 것이다.
+
+### 20.1 SwiftUI 뷰
+
+- 사용자 인터페이스(UI) 레이아웃은 뷰의 사용과 생성, 그리고 결합을 통해서 SwiftUI로 구성된다.
+- SwiftUI에서 뷰는 View 프로토콜을 따른 구조체로 선언된다.
+  + View 프로토콜을 따르도록 하기 위해서 구조체는 body 프로퍼티를 가지고 있어야 하며, 이 body 프로퍼티 안에 뷰가 선언되어야 한다.
+- 각각의 뷰는 View 프로토코을 따르는 독립적인 객체다.
+
+### 20.6 뷰 변경하기
+
+- 모든 SwiftUI 뷰에는 뷰의 모양과 동작을 변경하는 데 사용될 수 있는 수정자(modifier)들이 있다.
+
+### 20.7 텍스트 스타일로 작업하기
+
+- 뷰에 텍스트를 표시하기 위해 내장된 텍스트 스타일을 사용할 수있다.
+- 만약 내장된 텍스트 스타일을 이용하여 뷰의 폰트를 선언했다면 텍스트 크기를 사용자기 지정한 폰트 크기에 따라 동적으로 맞춰진다. (iOS 설정 > 디스플레이 및 밝기 > 텍스트 크기) (앱플 권장 사항)
+- 텍스트 스타일
+  + Large Title, Title, Title2, Title3
+  + Headline, Subheadline
+  + Body
+  + Callout   // iMessage 메시지
+  + Caption, Caption2
+  + Footnote
+
+### 20.8 수정자 순서
+
+- 수정자들을 연결할 때 수정자들이 **적용되는 순서에 따라 모양이 달라진다.**
+
+### 20.9 커스텀 수정자
+
+- 같은 수정자를 적용할 때 커스텀 수정자를 묶어서 참조하게 한다. 커스텀 수정자는 ViewModifier 프로토콜을 따르는 구조체로 선언한다.
+- 커스텀 수정자가 필요한 곳에서 각 View에서 modifier() 메서드를 호출하여, 커스텀 수정자를 전달하여 적용한다.
+
+```swift
+Text("Text 1")
+  .font(.largeTitle)
+  .backgroud(Color.white)
+  .border(Color.gray, width: 0.2)
+  .shadow(co.lr: Color.black, radius: 5, x: 0, y: 5)
+
+// =====> 커스텀 뷰 적용
+struct StandardTitle: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .font(.largeTitle)
+            .backgroud(Color.white)
+            .border(Color.gray, width: 0.2)
+            .shadow(co.lr: Color.black, radius: 5, x: 0, y: 5)
+    }
+}
+
+Text("Text 1")
+    .modifier(StandardTitle())
+Text("Text 2")
+    .modifier(StandardTitle())
+```
+
+### 20.10 기본적인 이벤트 처리
+
+
+
+---------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------
+
+
 --- 192
 ## Chapter 21. SwiftUI스택과 프레임
 --- 204
@@ -1100,5 +857,3 @@ Swift 프로그래밍을 배우기 위한 몇 가지 추천 사이트는 다음�
 (3) 개인적으로 추천하는 도움이 되는 iOS 공부 자료 | Joohee Kim's Blog. https://bing.com/search?q=Swift+%ed%94%84%eb%a1%9c%ea%b7%b8%eb%9e%98%eb%b0%8d+%ed%95%99%ec%8a%b5+%ec%82%ac%ec%9d%b4%ed%8a%b8+%ec%b6%94%ec%b2%9c.
 (4) [Site] 코딩테스트 준비, 알고리즘 공부 추천사이트 - ‍ .... https://lxxyeon.tistory.com/80.
 (5) ko.wikipedia.org. https://ko.wikipedia.org/wiki/%EC%8A%A4%EC%9C%84%ED%94%84%ED%8A%B8_(%ED%94%84%EB%A1%9C%EA%B7%B8%EB%9E%98%EB%B0%8D_%EC%96%B8%EC%96%B4).
-
-
