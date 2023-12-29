@@ -1164,9 +1164,43 @@ Label( // 별도의 뷰를 사용하여, 레이블 선어. 제목에 Text 뷰 �
 
 
 
-
 ## Chapter 21. SwiftUI스택과 프레임
---- 204
+
+- UI 설계를 크게 보면, 인터페이스 컴포넌트를 선택하고 뷰를 어떻게 배치할지 결정한 후 
+- 서로 다른 화면과 뷰들 간의 이동을 구현하는 것이다.
+- SwfitUI는 UI의 구성 방법과 화면의 방향과 크기에 따라 대응하는 방법을 정의하는 **레이아웃** View를 제공한다.
+
+### 21.1 SwiftUI 스택
+
+- SwiftUI는 VStack(수직), HStack(수평), ZStack(중첩되게 배치) 형태의 3개의 스택 레이아웃 View를 제공한다.
+
+### 21.3 컨테이너의 자식 뷰 제한
+
+- 컨테이너 뷰(Stack)는 직접적인 하위 뷰를 10개로 제한한다. 뷰가 10개를 넘어야 한다면, 여러 컨테이너로 나눠서 담는다.
+- Group뷰를 이용하여 뷰를 나눈다. 필요시 해당 그룹을 하나의 명령으로  숨길 수 있다.
+```swift
+VStack {
+    Group {
+        Text("Sample Text")
+        Text("Sample Text")
+        Text("Sample Text")
+        Text("Sample Text")
+        Text("Sample Text")
+        Text("Sample Text")
+    }
+
+    Group {
+        Text("Sample Text")
+        Text("Sample Text")
+        Text("Sample Text")
+        Text("Sample Text")
+        Text("Sample Text")
+        Text("Sample Text")
+    }
+}
+```
+
+### 21.4 동적 HStack과 VStack 변환 <--------------------- 확인!!!
 
 
 ## Chapter 22. SwiftUI상태 프로퍼티, Observable, State, Environment 객체
