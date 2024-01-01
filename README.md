@@ -323,6 +323,7 @@ func outputConversion(_ converterFunc: (Float) -> Float, value: Float) { // (Flo
 ### 9.14 클로저 표현식
 
 - 클로저 표현식은 독립적인 코드 블록이다. 클로저 표현식을 선언하고 그것을 상수에 할당한 다음 상수 참조를 통해 함수를 호출한다.
+
 ``` swift
 let sayHello = { print("Hello") }
 sayHello()
@@ -349,7 +350,9 @@ let join : (String, String) -> String = {
 
 ### 9.16 스위프트의 클로저
 
-- 클로저는 함수나 클로저 표현식과 같은 독립적인 코드블록과 코드 블록 주변에 있는 하나 이상의 변수가 결합된 것을 말한다.
+- **클로저(함수)**는 함수나 클로저 표현식과 같은 독립적인 코드블록과 코드 블록 주변에 있는 하나 이상의 변수가 결합된 것을 말한다.
+  + **이 함수(클로저)에서 외부에 있는 변수를 가두고 있으며(closed over). 외부 변수를 처리할 수 있다.**
+
 ``` swift
 func functionA() () -> Int {
     var counter = 0
@@ -1158,11 +1161,6 @@ Label( // 별도의 뷰를 사용하여, 레이블 선어. 제목에 Text 뷰 �
 )
 ```
 
----------------------------------------------------------------------------------------
----------------------------------------------------------------------------------------
----------------------------------------------------------------------------------------
-
-
 
 ## Chapter 21. SwiftUI스택과 프레임
 
@@ -1177,6 +1175,7 @@ Label( // 별도의 뷰를 사용하여, 레이블 선어. 제목에 Text 뷰 �
 ### 21.3 컨테이너의 자식 뷰 제한
 
 - 컨테이너 뷰(Stack)는 직접적인 하위 뷰를 10개로 제한한다. 뷰가 10개를 넘어야 한다면, 여러 컨테이너로 나눠서 담는다.
+  + **Xcode15.1 / Any iOS 에서는 50개 넘어도 오류 안남.**
 - Group뷰를 이용하여 뷰를 나눈다. 필요시 해당 그룹을 하나의 명령으로  숨길 수 있다.
 ```swift
 VStack {
@@ -1200,13 +1199,235 @@ VStack {
 }
 ```
 
-### 21.4 동적 HStack과 VStack 변환 <--------------------- 확인!!!
+### 21.4 동적 HStack과 VStack 변환
 
+- AnyLayout 인스턴스를 생성하고, HStackLayout 또는 VStackLayout 컨테이너에 할당하여 동적으로 변경할 수 있다.
+
+```swift
+struct DynamicStackView: View {
+    @State var myLayout: AnyLayout = AnyLayout(VStackLayout())
+    
+    var body: some View {
+        VStack {
+            myLayout {
+                Image(systemName: "goforward.10")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                Image(systemName: "goforward.15")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+            }
+            
+            HStack {
+                Button(action: {
+                    myLayout = AnyLayout(HStackLayout()) // 클로저함수
+                }) {
+                    Text("HStack")
+                }
+                Button(action: {
+                    myLayout = AnyLayout(VStackLayout())
+                }) {
+                    Text("VStack")
+                }
+            }
+        }
+    }
+}
+```
+
+### 21. 텍스트 줄 제한과 레이아웃 우선순위
+
+- 스택의 크기가 제한되거나 다른 뷰과 공간을 나눠사용하면 뷰 텍스트는 여러 줄로 표시된다.
+- 텍스트 줄을 몇 줄로 표현할지는 `.lineLimit()` 수정자(줄제한)로 조정한다.
+- 우선수위(priority)에 대한 가이드를 주면 높은 숫자가 우선이 되어 텍스트가 잘리는 현상이 사라진다. (`.layoutPriority(1)`)
+
+```swift
+    HStack {
+        Image(systemName: "airplane")
+        Text("Flight time: ")
+        Text("London")
+            .layoutPriority(1)
+    }
+    .font(.largeTitle)
+    .lineLimit(1) // (1..4) 범위로 지정 가능
+```
+### 21.6 전통적 스택 vs. 지연(lazy) 스택
+
+- 기존 HStack, VStack 뷰는 사용할 때 시스템은 포함된 하위 뷰들이 모두 생성된다. 만약 하위뷰가 수천 개가 있다면 성능 저하로 이어질 수 있다.
+- 이 문제를 해결하기 위해서 SwiftUI는 LazyVStack, LazyHStack 뷰도 제공한다. 이 뷰는 필요할 때만 뷰를 생성하고, 화면 밖 뷰는 생성하지 않으며 화면을 벗어나면 뷰를 해제한다.
+
+### 21.7 SwiftUI 프레임
+
+- 기본적으로 뷰는 자신의 콘텐트와 자신이 속한 레이아웃에 따라 **자동으로 크기가 조절된다.**
+- 뷰 자체가 특정 크기나 영역에 맞아야 한다면 frame 수정자를 사용한다.
+- 디폴트로, frame은 화면을 채울 때 안전 영역(safe area)을 준수한다. 안전 영역 밖에까지 확장되도록 frame을 구성하려면 `.edgesIgnoringSafeArea(.all)` 수정자를 사용한다.
+
+```swift
+    Text("Hello World, how ary you?")
+        .font(.largeTitle)
+        .frame(minWidth: 100, maxWidth: 300, minHeight: 100,
+                maxHeight: 100, alignment: .center)
+        .border(Color.blue, width: 5)
+```
+
+### 21.8 frame과 GeometryReader
+
+- 프레임은 뷰들을 담고 있는 컨테이너의 크기에 따라 조절되도록 구현할 수도 있다.
+- GeometryReader로 뷰를 감싸고 컨테이너의 크기를 식별하기 위한 리더를 이용할 수 있다.
+
+```swift
+    var body: some View {
+        GeometryReader { geometry in
+            VStack(alignment: .center) {
+                Text("Hello World, how are you?")
+                    .font(.largeTitle)
+                    .frame(width: geometry.size.width / 2,
+                           height: (geometry.size.height / 4) * 2)
+                    .border(Color.blue)
+                Text("Goodbye World")
+                    .font(.largeTitle)
+                    .frame(width: geometry.size.width / 3,
+                           height: geometry.size.height / 4)
+                    .border(Color.blue)
+            }
+            .border(Color.red)
+        }
+```
 
 ## Chapter 22. SwiftUI상태 프로퍼티, Observable, State, Environment 객체
---- 214
+
+- UI 내의 뷰들은 기본 데이터의 변경에 따른 처리 코드를 작성하지 않아도 뷰가 업데이트된다. 이것은 데이터와 UI 내의 뷰사이에 게시자(publisher)와 구독자(subscriber)를 구축하여 할 수 있다.
+- 이를 위하여 SwiftUI는 1) State 프로퍼티, 2) Obserable 객체(iOS13), 3) State 객체(iOS14), 4) Environment 객체를 제공하며, 이들 모두 UI 의 모양과 동작을 결정하는 상태를 제공한다.
+
+### 22.1 상태 프로퍼티
+
+- 상태 프로퍼티는 String 이나 Int 값처럼 간단한 데이터 타입을 저장하기 위해 사용되며, `@State` 프로퍼티 래퍼를 사용하여 선언된다.
+- **상태 프로퍼티 값이 변경되었다는 것은 그 프로퍼티가 선언된 뷰 계층 구조를 다시 렌더링해야 한다는 SwiftUI 신호다.**
+  + 결국, 그 프로퍼티에 의존하는 모든 뷰는 어떤 식으로든 최신 값이 반영되도록 업데이트된다.
+
+### 22.2 State 바인딩
+
+- 하위뷰에 상위 State 값을 `@Binding` 프로퍼티 래버를 이용하여 프로퍼티를 선언하여 연결한다.
+
+```swift
+struct ContentView: View {
+    @State private var wifiEnabled = true
+    @State private var userName = ""
+    
+    var body: some View {
+        VStack {
+            Toggle(isOn: $wifiEnabled) {
+                Text("Enable Wi-Fi")
+            }
+            TextField("Enter user name", text: $userName)
+            WifiImageView(wifiEnabled: $wifiEnabled) // <-- 하위에 State 연결.
+        }
+        .padding()
+    }
+}
+
+struct WifiImageView: View {
+    @Binding var wifiEnabled: Bool // <-- 상위의 State 연결.
+    var body: some View {
+        Image(systemName: wifiEnabled ? "wifi" : "wifi.slash")
+    }
+}
+```
+
+### 22.3 Observable 객체
+
+- 상태 프로퍼티는 뷰의 상태를 저장하는 방법을 제공하여 해당 뷰와 하위 뷰에만 사용할 수 있다. 상태 프로퍼티는 일시적인 것이어서 부모 뷰가 사라지면 그 상태로 사라진다.
+- 반면, Observable 객체는 여러 다른 뷰들이 외부에서 접근할 수 있는 지속적인 데이터를 표현하기 위해 사용된다.
+
+- Observable 객체는 ObservableObject 프로토콜을 따르는 클래스나 구조체 형태를 취한다.
+- Observable 객체는 게시된 프로퍼티(published property)로서 데이터 값을 **게시한다.**
+  그런 다음, Observer 객체는 게시자를 **구독하여** 게시된 프로퍼티가 변경될 때마다 업데이트를 받는다.
+- Combine 프레임워크에 포함되어 있는 Observable 객체는 게시자와 구독자 간의 관계를 쉽게 구축할 수 있도록 iOS 13에 도입되었다.
+
+### 22.4 State 객체
+
+- iOS14에 도입된 상태 객체(State Object) 프로퍼티 래퍼는 @ObservedObject 래퍼의 대안이다.
+- @ObservedObject 는 선언한 뷰가 참조를 소유하지 않아 SwfitUI 시스템에 의해서 파괴될 수 있고, @StateObject 는 참조를 소유하여 파괴되지 않는다.
+- **@ObservedObject 보다는 @StateObject를 사용하도록 한다.**
+
+```swift
+import Foundation
+import Combine
+
+class DemoData: ObservableObject {
+    @Published var userCount = 0      // 1) publish
+    @Published var currentUser = ""
+
+    init() {
+        // 데이터를 초기화하기 위한 코드가 여기 온다.
+        updateData()
+    }
+
+    func updateData() {
+        // Code here to keep data up to date
+        // 데이터를 최산 상태로 유지하기 위한 코드가 여기 온다.
+    }
+}
+```
+
+```swift
+import SwfitUI
+
+struct ContentView: View {
+    @StateObject var demoData : DemoData = DemoData() // 2) 구독
+    var body: some View {
+        Text("\(demoData.currentUser), you are user number \(demoDta.userCount)")   
+    }
+}
+```
+
+### 22. Environment 객체
+
+- Environment 객체는 Observable 객체와 같는 방식으로 선언된다. 중용한 차이점은 이 객체는 SwiftUI 환경에 저장되며, 뷰에서 뷰로 전달할 필요 없이 모든 자식 뷰가 접근할 수 있다.
+- 뷰의 상위 Stack에서 `.environmentObject()` 수정자를 이용하여, Observable 객체 인스턴스를 전달한다.
+
+```swift
+struct EnvironmentObjectView: View {
+    let speedsetting = SpeedSetting()
+    
+    var body: some View {
+        VStack {
+            SpeedControlView()
+            SpeedDisplayView()
+        }
+        .environmentObject(speedsetting)
+        .padding()
+    }
+}
+
+class SpeedSetting: ObservableObject{
+    @Published var speed = 0.0
+}
+
+struct SpeedControlView: View {
+    @EnvironmentObject var speedsetting: SpeedSetting
+    var body: some View {
+        Slider(value: $speedsetting.speed, in: 0...100)
+    }
+}
+
+struct SpeedDisplayView: View {
+    @EnvironmentObject var speedsetting: SpeedSetting
+    var body: some View {
+        Text("Speed = \(speedsetting.speed)")
+    }
+}
+```
+
 ## Chapter 23. SwiftUI예제 튜토리얼
---- 229
+
+-- 예제 skip
+
+---------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------
+
+-- pdf: 256
 
 ## Chapter 24. 스위프트 구조화된 동시성 개요
 --- 248
