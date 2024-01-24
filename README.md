@@ -1384,7 +1384,7 @@ struct ContentView: View {
 ### 22. Environment 객체
 
 - Environment 객체는 Observable 객체와 같는 방식으로 선언된다. 중용한 차이점은 이 객체는 SwiftUI 환경에 저장되며, 뷰에서 뷰로 전달할 필요 없이 모든 자식 뷰가 접근할 수 있다.
-- 뷰의 상위 Stack에서 `.environmentObject()` 수정자를 이용하여, Observable 객체 인스턴스를 전달한다.
+- 뷰의 상위 Stack에서 `.environmentObject()` 수정자를 이용하여, **Observable 객체 인스턴스를 전달한다.**
 
 ```swift
 struct EnvironmentObjectView: View {
@@ -1395,7 +1395,7 @@ struct EnvironmentObjectView: View {
             SpeedControlView()
             SpeedDisplayView()
         }
-        .environmentObject(speedsetting)
+        .environmentObject(speedsetting) // 뷰에 Observable 객체 인스턴스를 전달한다
         .padding()
     }
 }
@@ -1405,7 +1405,7 @@ class SpeedSetting: ObservableObject{
 }
 
 struct SpeedControlView: View {
-    @EnvironmentObject var speedsetting: SpeedSetting
+    @EnvironmentObject var speedsetting: SpeedSetting // 부모로 부터 environmemtObject를 받는다.
     var body: some View {
         Slider(value: $speedsetting.speed, in: 0...100)
     }
@@ -1480,131 +1480,1535 @@ struct SpeedDisplayView: View {
 
 ### 24.13 구조화되지 않은 동시성
 
--- pdf: 265
+- 구조화되지 않은 동시성(unstructed concurrency) 은 Task객체를 사용하여 만들 수 있다. 구조화 되지 않은 작업의 일반적인 용도는 동기 함수 내에서 비동기 함수를 호출하는 것이다.
+  + 결국은 동기에서 비동기 함수를 호출하는 Task 생성을 얘기하는 듯함.
+- Task(구조화되지 않은 작업)는 외부에서 취소할 수 있다.
 
----------------------------------------------------------------------------------------
----------------------------------------------------------------------------------------
----------------------------------------------------------------------------------------
+```swift
+let task = Task(priorty: .high) {
+    await doSomething()
+}
 
+// 중략
 
---- 248
+if(!task.isCancelled) {
+    task.cancel()
+}
+```
+
+### 24.13 분리된 작업
+
+- 분리된 작업(detached task)은 구조화되지 않은 동시성의 또 다른 형태로 호출하는 부모로부터 속성을 상속하지 않는다.
+- ??? 속성을 상속하지 않으면, 어떤 경우에 사용하는 것인지???
+```swift
+Task.detached {
+    await doSomething()
+}
+```
+
+### 24.15 작업 관리
+
+```swift
+// 작업 취소
+Task.cancel()
+
+// 1. 취소여부 확인
+if Task.isCancelled {
+
+}
+
+// 2. 취소여부 확인
+do {
+    try Task.checkCancellation() // 작업이 취소된 경우, CancellationError 오류가 발생한다.
+} catch {
+    // 작업 정리 수행
+}
+
+// 작업코드 내에서, 일시 중단할 경우.
+Task.yield() 
+```
+
+### 24.16 작업 그룹
+
+- `withThrowingTaskGroup()` 또는 `withTaskGroup()` 함수를 사용하여 작업그룹을 구현할 수 있다.
+- **그룹내 Task는 시작된 순서대로 완료되지 않는다.**
+- 작업 그룹에 접근할 수 있는 몇가지 메서드와 속성을 제공한다.
+  + addTask() 그룹에 작업을 추가한다.
+  + cancelAll() 그룹의 모든 작업을 취소한다.
+  + isCancelled 작업 그룹이 미미 취소되었는지 여부
+  + isEmpty 작업 그룹내에 작업이 남아 있는지 여부
+
+```swift
+func doSomethingAsyncByGroup() async {
+    print("--- Start \(Date())")
+    await withTaskGroup(of: Void.self) { group in
+        for i in 1...5 {
+            group.addTask {
+                async let result = takesTooLongAsyncLet()
+                print("Complted Task \(i) = \(await result)")
+            }
+        }
+    }
+    print("--- End \(Date())")
+}
+
+func takesTooLongAsyncLet() async -> Date {
+    sleep(5) // seconds
+    return Date()
+}
+```
+### 24.17 데이터 경쟁 피하기
+
+- 데이터에 동시에 접근할 경우 데이터 경쟁(data race)조건이 발생할 위험이 있다. 데이터가 손상될 수 있으므로 컴파일러에서 오류가 표시된다.
+- 이 경우 처리방안은 1) 데이터를 저장할 액터를 만들거나(25장), 2) withTaskGroup() 함수에서 결과 반환을 받아, for await에서 결과를 처리한다. 
+
+### 24.18 for await 루프
+
+- for await 표현식을 사용하면 비동기적을 반환되는 값의 수신을 기다릴 수 있다.
+```swift
+func doSomethingAsyncByGroupForAwait() async {
+    var timeStamps: [Int: Date] = [:]
+    await withTaskGroup(of: (Int, Date).self) { group in
+        for i in 1...5 {
+            group.addTask {
+                return (i, await takesTooLongAsyncLet())
+            }
+        }
+        
+        for await (task, date) in group {
+            timeStamps[task] = date
+        }
+    }
+    
+    for (task, date) in timeStamps {
+        print("Task = \(task), Date = \(date)")
+    }
+}
+```
+
+### 24.19 비동기 속성
+
+- 스위프트는 클래스와 구조체 타입 내에서 비동기 함수 뿐만아니라 **비동기 속성도 지원한다.** 현재는 읽기 전용 속성만 비동기가 될 수 있다.  
 
 
 ## Chapter 25. 스위프트 액터 소개
---- 256
 
+### 25.1 액터 개요
+- 액터는 한 번에 하나의 작업만 데이터에 접근할 수 있도록 내부 변경 가능 상태에 대ㄴ 비동기 접근을 제어하는 스위프트 타입이다.
+- 액터는 **참조 타입이고** 속성, 생성자 및 메서드를 포함한다는 점에서 클래스와 매우 유사하다.
+- 액터를 선언할 때의 가장 큰 차이점은 `class`대신 `actor`라는 단어가 사용된다.
 
+### 25.2 액터 선언하기
 
+- 액터는 비동기 함수 또는 Task 클로저 내와 같은 비동기 콘텍스트 내에서만 생성 및 액세스할 수 있다.
+- 액터 메서드를 호출하거나 속성에 접근할 때 await 키워드를 받드시 사용해야 한다.
+
+```swift
+actor BuildMessage {
+    var message: String = ""
+    let greeting = "Hello"
+
+    func setName(name: String) {
+        self.message = "\(greeting) \(name)"
+    }
+}
+
+func someFunction() async {
+    let builder = BuildMessge() // actor
+    await build.setName(name: "Jane Smith")
+    let message = await build.messge
+    print(message)
+}
+```
+
+### 25.3 데이터 격리 이해하기
+
+- 액터 내의 모든 메서드와 가변적인 속성은 격리된 것으로 간주되며 await 키워드를 통해서만 호출할 수 있다.
+- 가변적인 속성에 접근하지 않는 액터 메서드는 nonisolated 키워드를 사용하여 격리에서 제외시킬 수 있다.
+
+### 25.4 스위프트 액터 예제
+```swift
+
+import SwiftUI
+
+struct ContentView: View {
+    var body: some View {
+        VStack {
+            Button(action: {
+                Task {
+                    await doSomethging()
+                }
+            }, label: {
+                Text("Do something")
+            })
+            .padding()
+        }
+        .padding()
+    }
+    
+    func doSomethging() async {
+        print("--- Start \(Date())")
+        let store = TimeStore()
+        await withTaskGroup(of: Void.self) { group in
+            for i in 1...5 {
+                group.addTask {
+                    await store.addStamp(task: i, date: await takesTooLong())
+                }
+            }
+        }
+        
+        for (task, date) in await store.timeStamps {
+            print("Task = \(task), Date = \(date)")
+        }
+        print("--- End \(Date())")
+    }
+    
+    func takesTooLong() async -> Date {
+        sleep(2)
+        return Date()
+    }
+}
+
+actor TimeStore {
+    var timeStamps: [Int: Date] = [:]
+    func addStamp(task: Int, date: Date) {
+        timeStamps[task] = date
+    }
+}
+#Preview {
+    ContentView()
+}
+```
+
+### 25.5 MainActor 소개
+
+- 메인 스레드에서만 UI 업데이트를 수행된다.
+- 스위프트에서 메인 스레드는 메인 액터로 표현된다. 이것을 전역 액터(global actor)라고 한다.
+- 앱을 개발할 때, 메인 액터에서 실행하길 원하는 코드가 있을 수 있다. 특히 해당 코드가 어떤 식으로든 UI를 업데이트해야하는 경우다.
+   이런 경우 @MainActor 속성을 사용하여 코드를 표시할 수 있다.
+```swift
+@MainActor
+class TimeStore {
+    var timeStamps: [Int: Date] = [:]
+    func addStamp(task: Int, date: Date) {
+        timeStamps[task] = date
+    }
+}
+```
+
+- 다른 방법으로 단일 값이나 속성을 메인 스레드 종속으로 표시할 수 있다.
+```swift
+class TimeStore {
+    @MainActor var timeStamps: [Int: Date] = [:]
+    @MainActor func addStamp(task: Int, date: Date) { // timeStamps 에 접근하기 위해 @MainActor 선언
+        timeStamps[task] = date
+    }
+}
+```
+
+- MainActor의 메소드는 메인 스레드에서 작업을 수행하도록 비동기 코드 내에서 직접 호출 될 수 도 있다.
+```swift
+func runExample() async {
+    await MainActor.run {
+        // 메인 스레드에서 작업 수행
+    }
+}
+```
 
 ## Chapter 26. SwiftUI동시성 및 생명 주기 이벤트 수정자
---- 262
-## Chapter 27. Observable 객체와 Environment 객체 튜토리얼
---- 270
 
+1. 이벤트 수정자
+이벤트 수정자는 일반적인 UI 언어에서 이벤트 메소드 일부이다.
+
+- onAppear() : 
+- onDisapper() : 
+- onChange() : 
+
+### 26.5 ScenePhase와 onChange 수정자
+
+- ScenePhase는 현재 화면의 상태를 저장하기 위해 SwiftUI에서 사용하는 `@Environment` 속성이다.
+- ScenePhase 환경 프로퍼티를 onChange()와 함계 사용하면 앱의 화면 상태가 변경되는 시기를 식별할 수 있다.
+  화면이 포그라운드나 백그라운드로 전환되거나 활성화 또는 비활성화 될 때 앱은 작얼을 실행한다.
+- 앱 선언부에 적용할 때 유용하고, 선언부에서 개발 뷰만 적용도 가능하다.
+
+```swift
+@main
+struct Demo26LifecycleApp: App {
+    @Environment(\.scenePhase) private var scenePhase
+    
+    var body: some Scene {
+        WindowGroup {
+            ContentView()
+        }
+        .onChange(of: scenePhase, perform: { phase in
+            switch phase {
+                case .active: // 화면이 포그라운드에 있으며, 사용자에 표시되며, 사용자 인터랙션에 반응한다.
+                    print("Active")
+                case .inactive: // 화면이 포그라운드에 있고, 사용자에게 표시되지만 사용자 인터랙션에 반응하지 않는다.
+                    print("Inactive")
+                case .background:
+                    print("Background") // 사용자에게 화면(앱)이 표시되지 않는다.
+                default:
+                    print("Unknown scenephase")
+            }
+        })
+    }
+}
+```
+
+### 26.6 동시 작업 시작하기
+
+- task() 수정자를 사용하여 뷰를 만들 때 비동기 작업을 처리할 수 있다.
+
+```swift
+struct FirstTabView: View {
+    @State var title = "View One"
+    
+    var body: some View {
+        Text(title)
+            .task(priority: .background) { // task modifier 를 통해서, 비동기 호출 함.
+                title = await changeTitleAsync()
+            }
+    }
+    
+    func changeTitleAsync() async -> String {
+        sleep(3)
+        return "Aync task complete \(Date())"
+    }
+}
+```
+
+## Chapter 27. Observable 객체와 Environment 객체 튜토리얼
+
+1. Observable 객체와 Environment 객체 사용 예제
+- Observable 객체 구현, 프로퍼터 게시 정의
+- Observable 객체를 이용한 구독 방법
+- Environment 객체를 이용한 구독 방법
 
 ## Chapter 28. AppStorage와 SceneStorage를 사용한 SwiftUI데이터 지속성
---- 280
-## Chapter 29. SwiftUI스택 정렬과 정렬 가이드
---- 297
 
+- SwiftUI는 소량의 앱 데이터를 지속적으로 저장하기 위한 특별한 목적을 위해 두 개의 프로퍼티 래퍼(@AppStorage, @SceneStorage)를 제공한다.
+
+### 28.1 @SceneStorage 프로퍼티 래퍼
+
+- @SceneStorage 프로퍼티 래퍼는 개별 앱 화면 인스턴스의 범위 내에서 소량의 데이터를 저장할 때사용하고, 앱이 실행되는 사이에 화면 상태를 저장하고 복원하는 데 이상적이다.
+- 화면 저장소(Scene Storage)는 관련된 값을 저장하기 위해 키 문자열과 함께 @SceneStorage 프로프터 래퍼를 사용하여 선언된다.
+- 화면 저장소로 작업할 때, 화면의 각 인스턴스에는 다른 화면과 완전히 분리된 자체 저장소가 있다.!!!
+
+```swift
+@SceneStorage("city") var city: String = "" // key : "city"
+
+var body: some View {
+    TextEditor(text: $city)
+        .padding()
+}
+```
+
+### 28.2 @AppStorage 프로퍼티 래퍼
+
+- @AppStorage 프로퍼티 래퍼는 앱 전체를 통하여 접근하고 사용할 수 있는 데이터를 저장하는 데 사용된다.
+- 앱 저장소(app storage)는 수년 동안 iOS에서 사용할 수  있었던 기능인 UserDefaults를 기반으로 구축되었다.
+```swift
+@AppStorage("mystore") var myText: String = "" // key : mystore
+```
+
+- 데이터는 디폴트로 표준 UserDefaults 저장소에 저장된다. 하지만 데이터를 저장할 커스텀 앱 그룹(app group)을 지정할 수도 있다.
+  앱 그룹은 앱이 동일한 그룹 내의 다른 앱 또는 타깃과 데이터를 공유할 수 있게 한다.
+  앱 그룹에는 이름(일반적으로 group.com.mydomain.myappname)이 할당되며, **Xcode 프로젝트의 Signing & Capabilities 화면** 내에서 활성화되고 구성된다.
+- iPad에서 멀티 인스턴스를 실행하면, 같은 app storage를 사용하는 인스턴스는 같이 UI가 업데이트 되며, scene storage는 각 인스턴스별로 분리되어 각각 상태를 유지한다.
+- @State 프로퍼티 래퍼와 마찬가지로 저장된 값을 변경하면 새로운 데이터가 반영하도록 사용자 인터페이스가 새로고침 된다.
+```swift
+@AppStorage("mystore",
+            store: UserDefaults(suiteName: "group.com.mydomain.userdefaults")
+           ) var mytext: String = ""
+
+```
+
+### 28.6 커스텀 타입 저장하기
+
+- 기본 타입외에 다른 타입을 저장해야 한다면 스위프트의 Data 객체로 인코딩해서 저장하고, 가져올 때 디코딩한다.
+
+```swift
+// custom data - struct
+@AppStorage("username") var namestore: Data = Data()
+var username = UserName(firstName: "Mark", secondName: "Wilson")
+// save
+let encoder = JSONEncoder()
+if let data = try? encoder.encode(username) {
+    namestore = data
+}
+
+// read
+let decoder = JSONDecoder()
+if let name = try? decoder.decode(UserName.self, from: namestore) {
+    username = name
+}
+
+// struct
+struct UserName: Encodable, Decodable {
+    var firstName: String
+    var secondName: String
+}
+```
+
+```swift
+// custom data - image
+@AppStorage("myimage") var imagestore: Data = Data()
+var image = UIImage(named: "profilephoto")
+
+// encoding to save
+if let data = image!.pngData() {
+    imagestore = data
+}
+
+// decoding to read
+if let decodedImage: UIImage = UIImage(data: imagestore) {
+    image = decodedImage
+}
+```
+
+## Chapter 29. SwiftUI스택 정렬과 정렬 가이드
+
+- 컨테이너 정렬, 정렬 가이드, 커스텀 정렬, 서로 다른 스택들 간의 정렬 구현에 대해서 설명함.
+
+### 29.1 컨테이너 정렬
+
+- 기본 정렬 방법은 컨테이너 정렬이며, 스택에 포함된 하위 뷰들이 스택 내에서 정렬되는 방식을 정의한다.
+  스택에 포함된 각각의 뷰에 지정된 정렬이 따로 없다면, 스택에 적용한 정렬이 하위 뷰에 적용된다.
+- 이렇게 개별적으로 적용된 정렬이 없는 하위 뷰에 상위 뷰의 정렬 방법이 적용된는 것을 암묵적으로 정렬(implicitly aligned) 되었다고 한다.
+- VStack, HStack은 중앙 정렬(.center)을 디폴트로 한다.
+```swift
+    VStack(alignment: .trailing) {
+        Text("This is some text.")
+        Text("This is some longer text.")
+        Text("This is short.")
+    }
+
+    HStack(spacing: 20) {
+        Text("This is some text.")
+            .font(.largeTitle)
+        Text("This is some longer text.")
+            .font(.body)
+        Text("This is short.")
+            .font(.headline)
+    }
+
+    HStack(alignment: .lastTextBaseline,  spacing: 20) {
+        Text("This is some text.")
+            .font(.largeTitle)
+        Text("This is some longer text.")
+            .font(.body)
+        Text("This is short.")
+            .font(.headline)
+    }
+```
+
+### 29.2 정렬 가이드
+
+- 정렬 가이드(alignment guide)는 뷰가 스택에 포함된 다른 뷰와 정렬해야 할 때 사용되는 커스텀 포지션을 정의하는 데 사용된다.
+  이것은 표준 정렬 타입보다 더 복잡한 정렬을 구현할 수 있게 해준다.
+  예를 들어 ,정렬 가이드는 길이의 2/3 위치 또는 상단에서 20 포인트를 기준으로 뷰를 정렬할 때 사용할 수 있다.
+- 정렬 가이드내의 ViewDemensions 객체는 뷰의 HorizontalAlignment와 VerticalAlignment 프로퍼티에 대한 접근을 제공한다.
+
+```swift
+    VStack(alignment: .leading) {
+        Rectangle()
+            .foregroundColor(Color.green)
+            .frame(width: 120, height: 50)
+        Rectangle()
+            .foregroundColor(.red)
+            .frame(width: 200, height: 50)
+        Rectangle()
+            .foregroundColor(.blue)
+            .frame(width: 180, height: 50)
+    }
+    
+    // alignmentGuide를 이용해서 offset을 조정한 예.
+    VStack(alignment: .leading) {
+        Rectangle()
+            .foregroundColor(Color.green)
+            .frame(width: 120, height: 50)
+        Rectangle()
+            .foregroundColor(.red)
+            .alignmentGuide(.leading, computeValue: { d in 120.0 }) // 부모 스택의 정렬과 일치해 함.
+            .frame(width: 200, height: 50)
+        Rectangle()
+            .foregroundColor(.blue)
+            .frame(width: 180, height: 50)
+    }
+    
+    // alignmentGuide를 이용해서 offset을 조정한 예.
+    VStack(alignment: .leading) {
+        Rectangle()
+            .foregroundColor(Color.green)
+            .frame(width: 120, height: 50)
+        Rectangle()
+            .foregroundColor(.red)
+            .alignmentGuide(.leading, computeValue: { d in d.width / 3 }) // 부모 스택의 정렬과 일치해 함.
+            .frame(width: 200, height: 50)
+        Rectangle()
+            .foregroundColor(.blue)
+            .alignmentGuide(.leading, computeValue: { d in d[HorizontalAlignment.trailing] + 20}) // 부모 스택의 정렬과 일치해 함.
+            .frame(width: 180, height: 50)
+    }
+```
+
+### 29.4 커스텀 정렬 타입
+
+- SsiftUI는 커스텀 정렬 타입을 선언하여 표준 타입들이 확장될 수 있게 해준다.
+- 이 extension은 AlignmentID 프로토콜을 따르는 열거형(enum)을 포함해야 하며, defaultValue() 라는 이름의 함수가 구현되도록 지시한다.
+
+```swift
+struct CustomAlignmentView: View {
+    var body: some View {
+        HStack(alignment: .center) {
+            Rectangle()
+                .foregroundColor(.green)
+                .frame(width: 50, height: 200)
+            Rectangle()
+                .foregroundColor(.red)
+                .frame(width: 50, height: 200)
+            Rectangle()
+                .foregroundColor(.blue)
+                .frame(width: 50, height: 200)
+            Rectangle()
+                .foregroundColor(.orange)
+                .frame(width: 50, height: 200)
+        }
+        
+        HStack(alignment: .oneThird) {
+            Rectangle()
+                .foregroundColor(.green)
+                .frame(width: 50, height: 200)
+            Rectangle()
+                .foregroundColor(.red)
+                .alignmentGuide(.oneThird, computeValue: { d in d[VerticalAlignment.top] })
+                .frame(width: 50, height: 200)
+            Rectangle()
+                .foregroundColor(.blue)
+                .frame(width: 50, height: 200)
+            Rectangle()
+                .foregroundColor(.orange)
+                .alignmentGuide(.oneThird, computeValue: { d in d[VerticalAlignment.bottom] })
+                .frame(width: 50, height: 200)
+        }
+    }
+}
+
+extension VerticalAlignment {
+    private enum OneThird: AlignmentID {
+        static func defaultValue(in context: ViewDimensions) -> CGFloat {
+            return context.height / 3
+        }
+    }
+    
+    static let oneThird = VerticalAlignment(OneThird.self)
+}
+```
+
+### 29.5 스택 정렬 교차하기
+
+- 일반적으로 UI는 여러 스택이 중첩된다. 표준 정렬 타입의 단점은 스택 내의 뷰가 다른 스택에 있는 뷰와 정렬되도록 하는 방법을 제공하지 않는다.
+- 커스텀 정렬을 생성하여 특정 뷰를 기준으로 정렬할 수 있다.
+
+```swift
+struct StackCrossAlignView: View {
+    var body: some View {
+        HStack(alignment: .center) {
+            Circle()
+                .foregroundColor(.purple)
+                .frame(width: 70, height: 70)
+            VStack(alignment: .center) {
+                Rectangle()
+                    .foregroundColor(.green)
+                    .frame(width: 70, height: 70)
+                Rectangle()
+                    .foregroundColor(.red)
+                    .frame(width: 70, height: 70)
+                Rectangle()
+                    .foregroundColor(.blue)
+                    .frame(width: 70, height: 70)
+                Rectangle()
+                    .foregroundColor(.orange)
+                    .frame(width: 70, height: 70)
+            }
+        }
+        .padding()
+
+        // 원을 3번 째 박스와 정렬한다.
+        // 커스텀 정렬을 이용해서, alignmentGuide 에서, dimension 값을 이용해서 위치를 조정한다.
+        HStack(alignment: .crossAlignment) {
+            Circle()
+                .foregroundColor(.purple)
+                .alignmentGuide(.crossAlignment, computeValue: { d in d[VerticalAlignment.center] }) // dimension = bottom ~ circle.center
+                .frame(width: 70, height: 70)
+            VStack(alignment: .center) {
+                Rectangle()
+                    .foregroundColor(.green)
+                    .frame(width: 70, height: 70)
+                Rectangle()
+                    .foregroundColor(.red)
+                    .frame(width: 70, height: 70)
+                Rectangle()
+                    .foregroundColor(.blue)
+                    .alignmentGuide(.crossAlignment, computeValue: { d in d[VerticalAlignment.center] }) // dimension = bottom ~ rectangle.center
+                    .frame(width: 70, height: 70)
+                Rectangle()
+                    .foregroundColor(.orange)
+                    .frame(width: 70, height: 70)
+            }
+        }
+        .padding()
+    }
+}
+
+extension VerticalAlignment {
+    private enum CrossAlignment : AlignmentID {
+        static func defaultValue(in context: ViewDimensions) -> CGFloat {
+            return context[.bottom]
+        }
+    }
+    
+    static let crossAlignment = VerticalAlignment(CrossAlignment.self)
+}
+```
+
+### 29.6 ZStack 커스텀 정렬
+
+- 기본적으로 ZStack의 하위 뷰는 중앙 정렬된 상태로 위로 겹치게 쌓이게 된다.
+- ZStack의 하위 뷰에 대한 커스텀 정렬은 수평 정렬 가이드와 수직 정렬 가이드 모두 필요하다.
+
+```swift
+struct ZStackCustomAlignmentView: View {
+    var body: some View {
+        ZStack(alignment: .myAlignment) {
+            Rectangle()
+                .foregroundColor(.green)
+                .alignmentGuide(HorizontalAlignment.myAlignment, computeValue: { d in d[.trailing] })
+                .alignmentGuide(VerticalAlignment.myAlignment, computeValue: { d in d[.bottom] })
+                .frame(width: 100, height: 100)
+            Rectangle()
+                .foregroundColor(.red)
+                .alignmentGuide(HorizontalAlignment.myAlignment, computeValue: { d in d[HorizontalAlignment.center] })
+                .alignmentGuide(VerticalAlignment.myAlignment, computeValue: { d in d[.top] })
+                .frame(width: 100, height: 100)
+            Circle()
+                .foregroundColor(.orange)
+                .alignmentGuide(HorizontalAlignment.myAlignment, computeValue: { d in d[HorizontalAlignment.leading] })
+                .alignmentGuide(VerticalAlignment.myAlignment, computeValue: { d in d[.bottom] })
+                .frame(width: 100, height: 100)
+        }
+    }
+}
+
+extension HorizontalAlignment {
+    enum MyHorizontal: AlignmentID {
+        static func defaultValue(in context: ViewDimensions) -> CGFloat {
+            return context[HorizontalAlignment.center]
+        }
+    }
+    static let myAlignment = HorizontalAlignment(MyHorizontal.self)
+}
+
+extension VerticalAlignment {
+    enum MyVertical: AlignmentID {
+        static func defaultValue(in context: ViewDimensions) -> CGFloat {
+            return context[HorizontalAlignment.center]
+        }
+    }
+    static let myAlignment = VerticalAlignment(MyVertical.self)
+}
+
+extension Alignment {
+    static let myAlignment = Alignment(horizontal: .myAlignment, vertical: .myAlignment)
+}
+```
 
 ## Chapter 30. SwiftUI List와 내비게이션
---- 313
-## Chapter 31. SwiftUI List와 NavigationStack 튜토리얼
---- 332
 
+- List 뷰는 수직 방향의 목로 형태로 사용자에게 정보를 제공하고, 사용자가 터치 했을 때 다른 영역으로 이동한다.
+  이때 NavigationStack 과 NavigationLink 컴포넌트를 사용하여 구현된다.
+- `NavigationStack` navigation stack 설정 (iOS 16.0+). 다른 뷰로 이동할 때 원래의 뷰에 대한 참조가 스택에 푸시되고, 네비게이션 바에 뒤로 가는 화살표가 표시된다.
+- `NavigationLink` navigation link 영역과 전달 값 설정 (iOS 13.0+)
+- `NavigationPath` navigation 을 관리한다. (iOS 16.0+)
+- `.navigationDestination` navigation to destination 설정. (iOS 16.0+)
+- 리스트는 제목 있는 섹션으로 나눌 수 있으며,
+  제목과 버튼을 가지는 내비게이션 바를 가질 수 있다.
+  또한, 행의 추가, 삭제, 이동이 가능하도록 리스트를 구성할 수 있다.
+
+### 30.5 NavigationStack과 NavigationLink
+```swift
+struct ToDoItemView: View {
+    @State private var toggleStatus = true
+    @State var listData: [ToDoItem] = [
+        ToDoItem(task: "Take out trash", imageName: "trash.circle.fill"),
+        ToDoItem(task: "Pick up the kids", imageName: "person.2.fill"),
+        ToDoItem(task: "Wash the car", imageName: "car.fill")
+    ]
+    
+    var body: some View {
+        NavigationStack {
+            List {
+                Section(header: Text("Settings")) {
+                    Toggle(isOn: $toggleStatus) {
+                        Text("Allow Notifications")
+                    }
+                    NavigationLink(value: listData.count) {
+                        Text("View Task Count")
+                    }
+                }
+                
+                Section(header: Text("To Do Tasks")) {
+                    ForEach(listData) { item in
+                        NavigationLink(value: item.task) {
+                            HStack {
+                                Image(systemName: item.imageName)
+                                Text(item.task)
+                            }
+                        }
+                    }
+                    .onDelete(perform: deleteItem) // delete 버튼 추가
+                    .onMove(perform: moveItem) // move 기능 추가
+                }
+            }
+            .navigationTitle("To Do List")
+            .navigationBarItems(trailing: Button(action: addTask) {
+                Text("Add")
+            })
+            .navigationBarItems(trailing: EditButton()) // list 편집 버튼 추가. 삭제, 이동 가능.
+            .navigationDestination(for: String.self) { task in // navi - String 타입 처리
+                Text("Selected task : \(task)")
+            }
+            .navigationDestination(for: Int.self) { count in // nvgi - Int 타입 처리
+                Text("Number of tasks = \(count)")
+            }
+            .refreshable {
+                let tempList: [ToDoItem] = [
+                    ToDoItem(task: "Order coffe \(listData.count)", imageName: "cup.and.saucer.fill"),
+                ]
+                
+                listData = listData + tempList // 같은 타입 배열 merge
+            }
+        }
+        
+//        List(listData) { item in
+//            HStack {
+//                Image(systemName: item.imageName)
+//                Text(item.task)
+//            }
+//        }
+    }
+    
+    func addTask() {
+        // Add Task 작업 구현
+    }
+    
+    func deleteItem(at offsets: IndexSet) {
+        // 데이터 소스에서 항목을 삭제하는 코드
+    }
+    
+    func moveItem(from source: IndexSet, to destination: Int) {
+        // 항목을 재배열하는 코드
+    }
+}
+
+
+struct ToDoItem : Identifiable {
+    var id = UUID()
+    var task: String
+    var imageName: String
+}
+```
+
+### 30.7 네비게이션 경로로 작업하기
+
+- 사용자가 이동하는 뷰를 내비게이션 경로(navigation path)라고 한다.
+  우리가 만든 경로를 사용하는 NavigationStack을 사용하면, 스택의 여러 내비게이션 레벨을 건너 뛰어 되돌아 갈 수 있도록 대상들을 수동을 제거(pop)하는 등의 작업을 할 수 있다.
+- 스택에 있는 내비게이션 대상을 수를 식별하여 인스턴의의 `removeLast()`로 스택을 제거할 수 있다.
+- 내비게이션 경로의 `append()` 메서드를 호출하고 대상과 관련된 내비게이션 값을 전달하여 프로그램적으로 특정 대상 뷰로 이동할 수 있다.
+```swift
+    @State private var stackPath = NavigationPath()
+
+    var stackCount = stackPath.count
+    stackPath.removeLast(stackCount)
+    // 중략
+    stackPath.append(value)
+```
+
+### 30.8 내비게이션 바 커스터마이징
+
+- NavigationStack 에 타이틀 바를 설정하고, 부가적인 작업을 수행하는 버튼도 추가할 수 있다.
+
+```swift
+    .navigationTitle("To Do List") // title 설정
+    .navigationBarItems(trailing: Button(action: addTask) { // Add 버튼 추가
+        Text("Add")
+    })
+```
+
+### 30.10 계층적 목록
+-- "34장 List, OutlineGroup, DisclosureGroup 개요" 참조.
+
+### 30.11 멀티컬럼 내비게이션
+-- NavigationStack은 각 대상이 전체 디바이스 화면을 차지하는 뷰들 간 이동을 제공한다.
+   SwiftUI는 대상이 화면에 표시되면서 별도의 열에 각 대상을 나타내는 멀티컬럼 내비게이션을 지원한다.
+   멀티컬럼 내비게이션은 NavigationSplitView 구성 요소에 의해 제공되며 "32장 분할 뷰 내비게이션 개요"를 참조한다.
+
+## Chapter 31. SwiftUI List와 NavigationStack 튜토리얼
+-- 예제 프로그램
 
 ## Chapter 32. 분할 뷰 내비게이션 개요
---- 337
-## Chapter 33. NavigrationSplitView 튜토리얼
---- 345
-## Chapter 34. List, OutlineGroup, DisclosureGroup 개요
---- 353
-## Chapter 35. SwiftUI List, OutLineGroup, DisclosureGroup 튜토리얼
---- 364
 
+- 더 넓은 디스플레이를 활용하기 위해 SwiftUI에서는 멀티컬럼 기반의 내비게이션을 제공하도록 설계된 NavigationSplitView 컴포넌트가 있다. (iOS 16.0+)
+- NavigationSplitView는 1) 사이드바, 2) 콘텐트 그리고 3) 데테일 열로 구성된 최대 3개의 열을 지원한다.
+- 분할 네비기션의 열 너비와 스타일은 `navigationSplitViewColumnWidht()`와 `navigationSplitViewStyle()` 수정자를 사용하여 구성할 수 있다.
+- `NavigationSplitView`의 `columnVisibility` 초기화 매개변수를 사용하여 프로그램적으로 열 가시성을 여러 조합을 구성할 수 있다.
+
+```swift
+// 사이드바, 세부사항 뷰
+NavigationSplitView {
+    // 사이드바 목록
+} detail: {
+    // 세부사항 뷰
+}
+
+// 사이트바, 콘텐트 목록, 디테일 뷰
+NavigationSplitView {
+    // 사이드바 목록
+} content: {
+    // 콘텐트 목록
+} detail: {
+    // 디테일 뷰
+}
+```
+
+## Chapter 33. NavigrationSplitView 튜토리얼
+-- NavigationSplitview 예제 프로그램
+
+```swift
+struct ContentView: View {
+    @State private var categories = [
+        IconCategory(categoryName: "Folders", images: ["questionmark.folder.ar",
+                                                       "questionmark.folder",
+                                                       "questionmark.folder.fill.ar",
+                                                       "folder.fill.badge.gear",
+                                                       "questionmark.folder.fill"
+                                                      ]),
+        IconCategory(categoryName: "Circles", images: ["book.circle",
+                                                       "books.vertical.circle",
+                                                       "books.vertical.circle.fill",
+                                                       "book.circle.fill",
+                                                       "book.closed.circle"
+                                                      ]),
+        IconCategory(categoryName: "Clouds", images: ["cloud.rain",
+                                                      "cloud",
+                                                      "cloud.drizzle.fill",
+                                                      "cloud.fill",
+                                                      "cloud.drizzle"
+                                                     ])
+    ]
+    
+    @State private var selectedCategory: IconCategory?
+    @State private var selectedImage: String?
+    @State private var columnVisibility = NavigationSplitViewVisibility.all
+    
+    var body: some View {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
+            List(categories, selection: $selectedCategory) { Category in
+                Text(Category.categoryName).tag(Category)
+            }
+        } content: {
+            if let selectedCategory {
+                List(selectedCategory.images, id: \.self,
+                     selection: $selectedImage) { image in
+                    HStack {
+                        Image(systemName: image)
+                        Text(image)
+                    }.tag(image)
+                }
+            } else {
+                Text("Select a category")
+            }
+        } detail: {
+            if let selectedImage {
+                Image(systemName: selectedImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .padding()
+            } else {
+                Text("Select an image")
+            }
+        }
+        .navigationSplitViewStyle(.balanced)
+    }
+}
+```
+
+## Chapter 34. List, OutlineGroup, DisclosureGroup 개요
+
+- List 생성에 `children` 파라미터를 정의하면 계층 데이터를 표시할 수 있다. 
+- Section과 OutLineGroup 뷰를 사용하여 각각 **섹션** 헤더가 있는 그룹으로 나눈다.
+  + OutLineGroup에서 Section 하위의 계측 데이터를 표시한다.
+- DisclosureGroup 컨트롤을 사용하여 그룹내의 뷰를 확장/축소 할 수 있다.
+
+## Chapter 35. SwiftUI List, OutLineGroup, DisclosureGroup 튜토리얼
+-- 예제 프로그램
 
 ## Chapter 36. LazyVGrid 및 LazyHGrid로 SwiftUI 그리드 구축하기
---- 376
-## Chapter 37. Grid와 GridRow를 사용하여 SwiftUI 그리드 구축하기
---- 388
-## Chapter 38. SwiftUI에서 탭 그리고 페이지 뷰 구축하기
---- 393
 
+- SwiftUI는 UI 레이아웃에서 멀티컬럼 그리드(multi-column grid)를 표시할 수 있는 LazyVGrid, LazyHGrid, GridItem 세 가지 뷰를 제공한다.
+
+### 36.2 GridItem
+
+- GridItem 인스턴스는 각 행이나 열을 나타낸다. GridItem 뷰는 크기조정, 가격, 정렬 측면에서 행 또는 열의 속성을 정의한다.
+  또한 그리드 내에 표시되는 행 또는 열의 수와 이러한 제약 조건을 충족하기 위해 항목을 축소할 수 있는 최소 크기에 대한 제어도 제공한다.
+- `GridItem(sizing, spacing: CGFloat?, alignment: <alignment>)`
+  + sizing:
+    + flexible() : 그리드의 행 또는 열 수는 그리드 뷰에 배열 형태로 전달된 GridItem 인스턴스 수에 따라 결정된다.
+    + adaptive(minnum: CGFloat): 사용 가능한 공간에 가능한 많은 항목을 맞도록 조정된다. 축소될 수 있는 최소크기 minimum 인수를 선택사항으로 사용.
+    + fixed(size: CGFloat): 고정된 크기를 지정한다. 행 또는 열 수는 배열 행태로 전달될 GridItem 인스턴스 수에 따라 결정된다.
+
+### 36.6 적응형 GridItem으로 작업하기
+
+- 적응형(adaptive) 설정은 뷰가 차지하는 공간에 맞출 수 있는 한 많은 행이나 열이 자동으로 표시되도록 그리드 뷰를 구성한다.
+- 적응형 크기 조정을 사용하려면 아래와 같이 단일 적응형 항목을 포함하도록 gridItems 배열을 수정한다.
+```swift
+private var gridItems = [GridItem(.adaptive(minimum: 50))]
+```
+
+- LazyVGrid Demo
+```swift
+struct ContentView: View {
+    private var colors: [Color] = [.blue, .yellow, .green]
+    // flexible. 유연한 GridItem 크기를 위한 그리드 뷰
+//    private var gridItems = [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
+
+    // adaptive
+//    private var gridItems = [GridItem(.adaptive(minimum: 50))]
+    
+    // fixed
+//    private var gridItems = [GridItem(.fixed(75)), GridItem(.fixed(125)), GridItem(.fixed(175))]
+
+    // mixed
+//    private var gridItems = [GridItem(.fixed(75)), GridItem(), GridItem()]
+    private var gridItems = [GridItem(.fixed(100)), GridItem(.adaptive(minimum: 50))]
+
+    var body: some View {
+        ScrollView {
+            LazyVGrid(columns: gridItems, spacing: 5) {
+                ForEach((0...99), id: \.self) { index in
+                    CellContent(index: index, color: colors[index % colors.count])
+                }
+            }
+            .padding()
+        }
+    }
+}
+
+struct CellContent: View {
+    var index: Int
+    var color: Color
+    
+    var body: some View {
+        Text("\(index)")
+            .frame(minWidth: 50, maxWidth: .infinity, minHeight: 100)
+            .background(color)
+            .cornerRadius(8)
+            .font(.system(.largeTitle))
+    }
+}
+```
+
+- LazyHGrid Demo
+```swift
+struct HGridView: View {
+    private var colors: [Color] = [.blue, .yellow, .green]
+    // mixed
+//    private var gridItems = [GridItem(.fixed(75)), GridItem(), GridItem()]
+//    private var gridItems = [GridItem(.fixed(150)), GridItem(.adaptive(minimum: 50)), GridItem(.fixed(150))]
+    private var gridItems = [GridItem(.fixed(150)), GridItem(.flexible(minimum: 50)), GridItem(.fixed(150))]
+
+    var body: some View {
+        ScrollView(.horizontal) {
+            LazyHGrid(rows: gridItems, spacing: 5) {
+                ForEach((0...99), id: \.self) { index in
+                    HCellContent(index: index, color: colors[index % colors.count])
+                }
+            }
+            .padding()
+        }
+    }
+}
+
+struct HCellContent: View {
+    var index: Int
+    var color: Color
+    
+    var body: some View {
+        Text("\(index)")
+            .frame(minWidth: 75, minHeight: 50, maxHeight: .infinity)
+            .background(color)
+            .cornerRadius(8)
+            .font(.system(.largeTitle))
+    }
+}
+```
+
+## Chapter 37. Grid와 GridRow를 사용하여 SwiftUI 그리드 구축하기
+
+- iOS 16에 도입된 `Grid`와 `GridRow`는 많은 수의 뷰를 포함하는 스크롤 그리드를 표시하는데 적합하지 않지만,
+   열을 단일 셀에 두는 기능, 빈 셀 지원, 그리드행 정렬, 개별 셀 정렬 기능이 있다.
+
+```swift
+struct ContentView: View {
+    var body: some View {
+        Grid(horizontalSpacing: 10, verticalSpacing: 10) {
+            GridRow {
+                ForEach(1...5, id: \.self) { index in
+                    if (index % 2 == 1) {
+                        CellContent(index: index, color: .red)
+                    } else {
+                        Color.clear.gridCellUnsizedAxes([.horizontal, .vertical]) //  빈셀 Color.clear 뷰 설정. gridCellUnsizedAxes 는 높이, 너비 설정.
+                    }
+                }
+            }
+            
+            GridRow {
+                ForEach(6...8, id: \.self) { index in
+                    CellContent(index: index, color: .blue)
+                }
+            }
+            
+            GridRow {
+                ForEach(11...12, id: \.self) { index in
+                    CellContent(index: index, color: .green)
+                }
+            }
+            
+            CellContent(index:16, color: .blue)
+            GridRow {
+                CellContent(index: 17, color: .orange)
+                    .gridCellColumns(2)
+                CellContent(index: 18, color: .indigo)
+                    .gridCellColumns(3)
+            }
+        }
+        .padding()
+    }
+}
+
+struct CellContent: View {
+    var index: Int
+    var color: Color
+    
+    var body: some View {
+        Text("\(index)")
+            .frame(minWidth: 50, maxWidth: .infinity, minHeight: 100)
+            .background(color)
+            .cornerRadius(8)
+            .font(.largeTitle)
+    }
+}
+```
+
+-- 정렬 샘플
+```swift
+struct AlignmentView: View {
+    var body: some View {
+        Grid(alignment: .topLeading) {
+            GridRow(alignment: .bottom) {
+                CellContent(index: 0, color: .orange)
+                Image(systemName: "record.circle.fill")
+                    .gridColumnAlignment(.trailing) // 열의 정렬 설정. 전체 열에 적용됨.
+                Image(systemName: "record.circle.fill")
+                    .gridCellAnchor(.center) // 개별 셀에 적용됨.
+                Image(systemName: "record.circle.fill")
+                    .gridCellAnchor(.top)
+                CellContent(index: 0, color: .yellow)
+            }
+            .font(.largeTitle)
+
+            GridRow {
+                CellContent(index: 0, color: .orange)
+                Image(systemName: "record.circle.fill")
+                Image(systemName: "record.circle.fill")
+                Image(systemName: "record.circle.fill")
+                CellContent(index: 0, color: .yellow)
+            }
+            .font(.largeTitle)
+
+            GridRow {
+                ForEach(1...5, id: \.self) { index in
+                    CellContent(index: index, color: .red)
+                }
+            }
+        }
+        .padding()
+    }
+}
+```
+### 37.7 열 확장하기
+
+- grid와 GridRow 의 주용 기능은 단일 셀이 지정된 수의 열에 놓일 수 있게 한다.(**열을 병합한다.**) `gridCellColumns()` 수정자 사용.
+
+## Chapter 38. SwiftUI에서 탭 그리고 페이지 뷰 구축하기
+
+### 38.1 SwiftUI TabView 개요
+
+- 디폴트로 TabView는 하위 뷰들 사이를 이동하는데 사용될 탭 아이템을 가진 탭 바를 레이아웃 하단에 표시한다.
+- 탭 아이템은 수정자를 사용하여 각각의 콘텐트 뷰에 적용되며, Text 뷰와 Image 뷰로 구성할 수 있다.
+- 탭 아이템에 태그를 추가하면 프로그램적으로 현재 선택된 탭을 제어할 수 있다.
+
+```swift
+struct ContentView: View {
+    @State private var selection = 1
+    
+    var body: some View {
+        TabView(selection: $selection) {
+            Text("First Content View : \(selection)")
+                .tabItem {
+                    Image(systemName: "1.circle")
+                    Text("Screen One")
+                }.tag(1)
+            Text("Second Content View : \(selection)")
+                .tabItem {
+                    Image(systemName: "2.circle")
+                    Text("Screen Two")
+                }.tag(2)
+            Text("Third Content View : \(selection)")
+                .tabItem {
+                    Image(systemName: "3.circle")
+                    Text("Screen Three")
+                }.tag(3)
+        }
+        .font(.largeTitle)
+//        .tabViewStyle(PageTabViewStyle()) // PageTabViewStyle() : 뷰를 왼쪽/오른쪽을 스와이프하며 이동한다.
+    }
+}
+```
 
 ## Chapter 39. SwiftUI에서 콘텍스트 메뉴 바인딩하기
---- 397
-## Chapter 40. SwiftUI 그래픽 드로잉 기초
---- 406
-## Chapter 41. SwiftUI 애니메이션과 전환
---- 420
 
+- SwiftUI에서 콘텍스트 메뉴(context menu)는 사용자가 뷰를 롱 프레스를 했을 때 나타나는 메뉴다. (mac은 마우스 우측 클릭)
+  각 메뉴 항목은 일반적으로 Text 뷰 그리고 선택사항인 Image 뷰와 함께, 선택했을 때 동작을 수행하도록 구성된 button 뷰를 포함한다.
+
+```swift
+struct ContentView: View {
+    @State private var foregroundColor: Color = Color.black
+    @State private var backgroundColor: Color = Color.white
+    
+    var body: some View {
+        Text("Hello, world!")
+            .padding()
+            .font(.largeTitle)
+            .foregroundColor(foregroundColor)
+            .background(backgroundColor)
+            .contextMenu{
+                Button(action:  {
+                    self.foregroundColor = .black
+                    self.backgroundColor = .white
+                }) {
+                    Text("Normal Colors")
+                    Image(systemName: "paintbrush")
+                }
+                
+                Button(action: {
+                    self.foregroundColor = .white
+                    self.backgroundColor = .black
+                }) {
+                    Text("Inverted Colors")
+                    Image(systemName: "paintbrush.fill")
+                }
+            }
+    }
+}
+```
+
+## Chapter 40. SwiftUI 그래픽 드로잉 기초
+
+- SwiftUI는 내장된 도형과 그레이디언트 드로잉 뿐만 아니라, Shape 프로토콜과 Path 프로토콜을 따르는 완전히 새로운 뷰를 생성하여 커스텀 드로잉을 할 수 있게도 한다.
+
+### 40.2 SwiftUI 도형
+
+- 기본적으로 도형은 도형이 속한 뷰에서 사용할 수 있는 모든 공간을 차지하고, 부모 뷰의 포그라운드 색상으로 채운다.
+- 도형의 색상과 크기는 `fill()` 수정자와 `frame()` 수정자로 설정한다.
+- `stroke()` 는 색을 채우지 않고 테두리만 설정한다.
+- fill 수정자와 stroke 수정자를 결합할 수 없다. 하지만, overlay()를 이용하여 색을 채운 도형위에, 외곽선 도형을 그릴 수 있다.
+
+```swift
+struct ContentView: View {
+    var body: some View {
+        Capsule()
+            .stroke(lineWidth: 10)
+            .fill(.red)
+            .frame(width: 200, height: 100)
+        
+        RoundedRectangle(cornerRadius: 20)
+            .stroke(style: StrokeStyle(lineWidth: 8, dash: [10]))
+            .foregroundColor(.blue)
+            .frame(width: 200, height: 100)
+        
+        Ellipse()
+            .stroke(style: StrokeStyle(lineWidth: 20,
+                                       dash: [10,5,2],
+                                      dashPhase: 10))
+            .foregroundColor(.blue)
+            .frame(width: 200, height: 150)
+
+        Ellipse()
+            .fill()
+            .overlay(Ellipse() // overlay를 이용해서 색을 채원 도형위에, stroke 도형을 올린다.
+                .stroke(.blue, lineWidth: 10))
+            .frame(width: 200, height: 150)
+        
+        MyShape()
+            .fill(.green)
+            .frame(width: 200, height: 150)
+    }
+}
+
+struct MyShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
+        path.addQuadCurve(to: CGPoint(x: rect.minX, y: rect.maxY),
+                          control: CGPoint(x: rect.midX, y: rect.midY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.closeSubpath()
+        return path
+    }
+}
+```
+### 40.4 커스텀 경로와 도형 그리기
+
+- 지금까지 사용된 도형은 기본적으로 `Shape` 프로토콜을 따르는 구조체 객체다.
+  Shape 프로토콜을 따르기 위해 구조체는 `CGRect` 형태의 사각형을 받아 그 사각형에 그려질 것을 정의하는 `Path` 객체를 반환하는 `path()` 함수를 구현해야 한다.
+- `path` 인스턴스는 포인트 간의 좌표를 지정하고 그려질 선을 정의하여 2 차원 도형을 제공한다.
+   포인트 간의 선은 직선, 3차 및 2차 베지어 곡선, 호, 타원 그리고 사각형을 사용하여 그릴 수 있다.
+- path정보: https://developer.apple.com/documentation/swiftui/path
+
+```swift
+struct GradientView: View {
+    let colors = Gradient(colors: [Color.red,
+                                   Color.yellow,
+                                   Color.green,
+                                   Color.blue,
+                                   Color.purple])
+    var body: some View {
+        Grid {
+            GridRow {
+                Circle()
+                    .fill(.blue.gradient)
+                    .frame(width: 120, height: 120)
+                Circle()
+                    .fill(.blue.shadow(.drop(color: .black, radius: 10))) // drop shadow
+                    .frame(width: 120, height: 120)
+            }
+            GridRow {
+                Circle()
+                    .fill(.blue.shadow(.inner(color: .white, radius: 15))) // inner shadow
+                    .frame(width: 120, height: 120)
+            }
+            GridRow {
+                Circle()
+                    .fill(RadialGradient(gradient: colors,
+                                         center: .center,
+                                         startRadius: 0,
+                                         endRadius: 60))
+                    .frame(width: 120, height: 120)
+                Circle()
+                    .fill(AngularGradient(gradient: colors, center: /*@START_MENU_TOKEN@*/.center/*@END_MENU_TOKEN@*/))
+                    .frame(width: 120, height: 120)
+            }
+            GridRow {
+                Rectangle()
+                    .fill(LinearGradient(gradient: colors, startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .frame(width: 120, height: 120)
+                MyShape()
+                    .fill(RadialGradient(gradient: colors,
+                                         center: .center,
+                                         startRadius: 0,
+                                         endRadius: 60))
+                    .background(LinearGradient(gradient: Gradient(colors: [Color.yellow, Color.brown]), // background 추가
+                                               startPoint: .topLeading,
+                                               endPoint: .bottomTrailing))
+                    .frame(width: 120, height: 120)
+            }
+        }
+    }
+}
+```
+
+## Chapter 41. SwiftUI 애니메이션과 전환
+
+- 이번 장은 **뷰를 애니메이션**하는 것과 SwiftUI 앱 내에서 **전환**에 대해서 설명한다.
+- 애니메이션은 화면상의 뷰 회전, 확대 그리고 동작 등의 다양한 형태를 취한다.
+- 전환은 레이아웃에서 뷰가 추가되거나 제거될 때 뷰가 어떻게 나타나고 사라질지를 정의한다.
+
+### 41.2 암묵적 애니메이션 (implicit animation)
+
+1. `animation()` 수정자를 사용하여, 애니메이션 수정자 앞에 있는 모든 수정자를 암묵적으로 애니메이션되도록 한다.
+2. animation 커브
+- .linear : 지정된 시간 동안 일정한 속도로 애니메이션을 수행한다.
+- .easeOut : 빠른 속도로 시작하여 끝에 다다를수록 점점 느려진다.
+- .easeIn : 느린 속도로 시작하여 끝에 다다를수록 점점 빨라진다.
+- .easeInOut: 느린 속도록 시작하여 점점속도를 올리다가 끝에 다시 느려진다.
+
+```swift
+struct ContentView: View {
+    @State private var rotation: Double = 0
+    @State private var scale: CGFloat = 1
+    
+    var body: some View {
+        Button(action: {
+            self.rotation = (self.rotation < 360 ? self.rotation + 60: 0)
+            self.scale = (self.scale < 2.8 ? self.scale + 0.3 : 1)
+        }, label: {
+            Text("Click to animate")
+                .rotationEffect(.degrees(rotation))
+                .scaleEffect(scale)
+                .animation(.easeInOut(duration: 1), value: rotation)
+//                .animation(.spring(response: 1, dampingFraction: 0.2, blendDuration: 0), value: rotation) // 스프링 효과
+//                .animation(Animation.linear(duration: 0.2).repeatCount(2, autoreverses: false), value: rotation) // 애니메이션 반복
+//                .animation(Animation.linear(duration: 1).repeatForever(autoreverses: true), value: rotation) // 애니메이션 무한 반복
+//                .scaleEffect(scale) // scaleEffect을 애니메이션 뒤에 정의하면 회전에는 animation 이 적용되지 않는다.
+        })
+    }
+}
+```
+
+### 41.4 명시적 애니메이션 (explicit animation)
+
+- SwiftUI는 withAnimation() 클로저를 사용하여 구현되는 명시적 애니메이션 방법도 제공한다.
+- `withAnimation()` 클로저 내에서 변경된 프로퍼티만 애니메이션 된다. 
+   명시적 애니메이션을 사용하면 수정자(회전효과, 등)의 순서에 무관하게 지정 프로퍼티에 애니메이션이 적용된다.  
+```swift
+    @State private var redCircle = false
+
+    Circle()
+        .fill(redCircle ? .red : .blue)
+        .frame(width: 200, height: 200)
+        .onTapGesture {
+            withAnimation {
+                redCircle.toggle() // 변경에 애니메이션 효과 설정
+            }
+        }
+```
+### 41.5 애니메이션과 상태 바인딩
+
+- 상태 값 변경의 결과로 인한 뷰의 변화가 애니메이션되도록 상태 프로퍼티 바인딩에 애니메이션을 적용할 수도 있다.
+```swift
+    @State private var visibility = false
+
+    VStack {
+        Toggle(isOn: $visibility.animation(.linear(duration: 1))) { // 상태에 애니메이션 바인딩 설정
+            Text("Toggle Text View")
+        }
+        .padding()
+        
+        if visibility {
+            Text("Hello World")
+                .font(.largeTitle)
+        } else {
+            Text("Goodbye World")
+                .font(.largeTitle)
+        }
+    }
+```
+
+### 41.6 자동으로 애니메이션 시작하기
+
+```swift
+struct StartAnimationView: View {
+    @State private var rotation: Double = 0
+    @State private var isSpinning: Bool = true
+    
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(lineWidth: 2)
+                .foregroundColor(.blue)
+                .frame(width: 360, height: 360)
+            
+            Image(systemName: "forward.fill")
+                .font(.largeTitle)
+                .offset(y:-180)
+                .rotationEffect(.degrees(rotation))
+                .animation(Animation.linear(duration: 5).repeatForever(autoreverses: false), value: rotation)
+        }
+        .onAppear() {
+            self.isSpinning.toggle()
+            rotation = isSpinning ? 0 : 360
+        }
+    }
+}
+```
+
+### 41.7 SwiftUI 전환
+
+1. `transition()` 수정자 효과
+- .slide - 뷰가 옆으로 슬라이딩 하면 나가거나 들어온다.
+- .scale - 뷰가 작아지면서 사라지고 커지면서 나타난다.
+- .move(edge: edge) - 지정 방향으로 추가/제거된다.
+- .opacity - 기본 전환 효과로 페이드 되는 동안 크기와 위치를 유지한다.
+
+### 41.8 전환 결합하기
+
+- `AnyTransition` 의 인스턴스를 `combined(with:)` 메서드와 함께 사용하면 전환을 결합할 수 있다.
+```swift
+struct TransitionView: View {
+    @State private var isButtonVisible: Bool = true
+    
+    var body: some View {
+        VStack {
+            Toggle(isOn: $isButtonVisible.animation(.linear(duration: 2))) {
+                Text("Show/Hide Button")
+            }
+            .padding()
+            
+            if isButtonVisible {
+                Button(action: {}) {
+                    Text("Example Button")
+                }
+                .font(.largeTitle)
+//                .transition(.slide) // 정의하지 않으면 .opacity 기본 효과가 적용된다.
+//                .transition(AnyTransition.opacity.combined(with: .move(edge: .top))) // 전환결합하기
+//                .transition(.fadeAndMove) // 익스텐션 전환 사용하기
+                .transition(.asymmetric(insertion: .scale, removal: .fadeAndMove)) // 비대칭 전환
+            }
+        }
+        Spacer()
+    }
+}
+
+extension AnyTransition {
+    static var fadeAndMove: AnyTransition { // 익스텐션으로 전환 추가하기
+        AnyTransition.opacity.combined(with: .move(edge: .bottom))
+    }
+}
+```
 
 ## Chapter 42. SwiftUI에서 제스처 작업하기
---- 429
+
+### 42.2 기본 제스처
+- 제스터라는 용어는 터치 스크린과 사용자 간의 인터랙션을 설명하는 데 사용되며, 앱 내에서 이를 감지하여 이벤트를 실행한다.
+- 드래그, 탭, 더블 탭, 핀칭, 로테이션, 롱 프레스 등은 모두 SwiftUI에서 제스처로 분류한다.
+- `gesture()` 수정자에 `nil` 값을 전달하면 제스처 인식기를 뷰에서 제거할 수 있다.
+
+```swift
+struct ContentView: View {
+    var body: some View {
+        let tap = TapGesture(count: 2) // 인식 탭수 설정
+                    .onEnded { _ in
+                        print("Tapped")
+                    }
+        let longPress = LongPressGesture(minimumDuration: 5, maximumDistance: 25) // 시간 및 접촉유효거리 설정
+            .onEnded { _ in
+                print("Long Press")
+            }
+
+        Image(systemName: "hand.point.right.fill")
+            .gesture(tap)
+            .gesture(longPress)
+        
+    }
+}
+```
+
+### 42.3 onChanged 액션 콜백
+
+- TapGesture 를 제외한 다른 제스처 인식기는 `onChanged` 액션 콜백을 지원한다.
+  onChnaged 콜백은 제스처가 처음 인식되었을 때 호출되며, 제스처가 끝날 때까지 제스처의 값이 변할 때마다 호출된다.
+
+
+
+-- pdf: 451 / 425
+
+### 42.4 updating 콜백 액션
+
+--- 01/24 ---
+
 ## Chapter 43. 사용자 정의 SwiftUI ProgressView 생성하기
 --- 436
+--- 01/25 ---
+
 ## Chapter 44. SwiftUI 차트로 데이터 표시하기
 --- 444
+
 ## Chapter 45. SwiftUI 차트 튜토리얼
 --- 449
 
-
-
 ## Chapter 46. SwiftUI DocumentGroup 개요
 --- 460
+
 ## Chapter 47. SwiftUI DocumentGroup 튜토리얼
 --- 467
+--- 01/26(금)---
+
 ## Chapter 48. 코어 데이터와 SwiftUI 소개
 --- 476
 
-
 ## Chapter 49. SwiftUI 코어 데이터 튜토리얼
 --- 492
+
 ## Chapter 50. SwiftUI 코어 데이터와 클라우드킷 저장소 개요
 --- 498
 ## Chapter 51. SwiftUI 코어 데이터와 클라우드킷 튜토리얼
 --- 510
-
-
+--- 01/27(토) ---
 
 ## Chapter 52. 시리킷 소개
 --- 518
+
 ## Chapter 53. SwiftUI 시리킷 메시징 익스텐션 튜토리얼
 -- 526
+
 ## Chapter 54. 시리 단축어 앱 통합 개요
 --- 533
 
-
-
 ## Chapter 55. SwiftUI 시리 단축어 튜토리얼
 --- 555
+
+-- 01/28(일) --
+
+
 ## Chapter 56. SwiftUI와 위젯킷으로 위젯 빌드하기
 --- 564
-
+--- 01/29 ---
 
 ## Chapter 57. SwiftUI 위젯킷 튜토리얼
 --- 579
+--- 01/30 ---
+
 ## Chapter 58. 위젯킷 크기 지원
 --- 585
 ## Chapter 59. SwiftUI 위젯키 딥링크 튜토리얼
 --- 592
+--- 01/31 ---
+
 ## Chapter 60. 위젯킷 위젯에 구성 옵션 추가하기
 --- 600
 
-
-
 ## Chapter 61. UIView를 SwiftUI에 통합하기
 --- 610
+--- 2/1 ---
+
 ## Chapter 62. UIViewController를 SwiftUI와 통합하기
 --- 618
+--- 2/2 ---
+
 ## Chapter 63. SwiftUI를 UIKit에 통합하기
 --- 631
 
-
-
 ## Chapter 64. 앱 스토어에 iOS 16 애플리케이션 등록을 위한 준비와 제출하기
 --- 642
+
+--- 02/3(토) ---
+
+-- 2/4(일) --
+-- 만들 앱 / 선정
+-- 일단 쉬운 걸로
 
 end.
 
