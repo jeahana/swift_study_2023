@@ -2921,48 +2921,962 @@ struct ContentView: View {
 - TapGesture 를 제외한 다른 제스처 인식기는 `onChanged` 액션 콜백을 지원한다.
   onChnaged 콜백은 제스처가 처음 인식되었을 때 호출되며, 제스처가 끝날 때까지 제스처의 값이 변할 때마다 호출된다.
 
-
-
--- pdf: 451 / 425
-
 ### 42.4 updating 콜백 액션
 
---- 01/24 ---
+1. updaing 콜백 액션은 onChanged 와 거의 비슷하나, @GestureState 라는 특별한 프로퍼티 래퍼를 사용한다.
+2. @GestureState 는 표준 @State 프로퍼티와 유사하지만, 제스처와 함께 사용되도록 설계됐다.
+   @GestureState 는 제스처가 끝나면 자동으로 원래 상태값이 리셋된다. updating 콜백은 제스처를 하는 동안에만 필요한 임시 상태를 저장하는 데 최적이다.
+3. updating 액션이 호출 될 때 아래 세가지 인자가 전달된다.
+- 제스처 정보가 담겨 있는 DragGesture.Value 인스턴스
+- 제스처가 바인딩되어 있는 @GestureState 프로퍼티 참조체
+- 제스처에 해다하는 애니메이션의 현재 상태를 담고 있는 Transaction 객체
+4. DragGesture.Value 프로퍼티
+- .locaton (CGPoint) : 드레그 제스처 현재 위치
+- .predictedEndLocation (CGPoint) : 현재 드래그 속도를 바탕으로 드래그를 멈추게 되다면 예상되는 최종 위치
+- .predictedEndTranslation (CGSize) : 현재의 드래그 속도를 바탕으로 드래그를 멈추게 된다면 예상되는 최종 오프셋
+- .startLocation (CGPoint) : 드래그 제스처가 시작된 위치
+- .time (Date) : 현재 드래그 이벤트가 발생한 타임 스탬프
+- .translation (CGSize) : 드래그 제스처를 시작한 위치부터 현재 위치까지의 총 오프셋
+
+```swift
+struct ContentView: View {
+    @State private var magnification: CGFloat = 1.0
+    @GestureState private var offset: CGSize = .zero
+    
+    var body: some View {
+        let tap = TapGesture(count: 2) // 1) 탭. 인식 탭수 설정
+                    .onEnded { _ in
+                        print("Tapped")
+                    }
+        let longPress = LongPressGesture(minimumDuration: 3, maximumDistance: 25) // 2) 롱프레스. 시간 및 접촉유효거리 설정
+            .onEnded { _ in
+                print("Long Press")
+            }
+        
+        let magnificationGesture = MagnifyGesture(minimumScaleDelta: 0) // 3) 핀칭(pinching).
+            .onChanged{ value in
+                if value.magnification < 1.0 {
+                    self.magnification = 1.0
+                } else if value.magnification > 5.0 {
+                    self.magnification = 5.0
+                } else {
+                    self.magnification = value.magnification
+                }
+            }
+            .onEnded { _ in
+                print("Gesture Ended")
+            }
+        
+        let drag = DragGesture() // 4) 드래그. 4분위에서, 좌측(-X), 우측(+X), 위(-Y), 아래(+Y)
+            .updating($offset) { dragValue, state, Transaction in
+                state = dragValue.translation
+                //.location, .predictedEndLocation, .predictedEndTranslation, .startLocation, .time, .translation
+            }
+        
+
+        Image(systemName: "hand.point.right.fill")
+            .resizable()
+            .font(.largeTitle)
+            .offset(offset) // drag offset 전달하여, 드래그되게 한다.
+            .scaleEffect(magnification)
+            .frame(width: 100, height: 100)
+            .gesture(tap)                  // 1) 탭
+            .gesture(drag)                 // 4) 드레그
+            .gesture(longPress)            // 2) 롱프레스
+            .gesture(magnificationGesture) // 3) 핀칭
+    }
+}
+```
+
+### 42.5 제스처 구성하기
+
+- 하나의 뷰에 여러 개의 제스처를 결합하여 적용할 수 있다.
+- `simultaneously` 수정자를 사용하면 구성되면 두 개의 제스처가 동시에 수행된다.
+- `sequenced` 수정자를 사용하면 두 번째 제스처가 감지되기 전에 첫 번째 제스처가 완료되어야 한다.
+- `exclusively` 수정자를 사용하면 둘 중 하나의 제스처가 감지되면 감지된 것으로 간주한다.
+
+```swift
+// 두가지 제스처를 동시에 처리
+struct GestureMixedView: View {
+    @GestureState private var offset: CGSize = .zero
+    @GestureState private var longPress: Bool = false
+    
+    var body: some View {
+        let longPressAndDrag = LongPressGesture(minimumDuration: 2.0)
+            .updating($longPress) { value, state, transition in
+                state = value
+                print("long press \(longPress)")
+            }
+            .simultaneously(with: DragGesture())
+            .updating($offset) { value, state, transaction in
+                state = value.second? .translation ?? .zero
+            }
+        
+        Image(systemName: "hand.point.right.fill")
+            .foregroundColor(longPress ?  .red : .blue)
+            .font(.largeTitle)
+            .offset(offset)
+            .gesture(longPressAndDrag)
+    }
+}
+```
+
+```swift
+// long press 2 초 후에, 드래그 가능
+struct SequencedGestureView: View {
+    @GestureState private var offset: CGSize = .zero
+    @State private var dragEnabled: Bool = false
+    
+    var body: some View {
+        let longPressBeforeDrag = LongPressGesture(minimumDuration: 2.0)
+            .onEnded({ _ in
+                self.dragEnabled = true
+            })
+            .sequenced(before: DragGesture())
+            .updating($offset) { value, state, transaction in
+                switch value {
+                case .first(true):
+                    print("Long press is progress")
+                case .second(true, let drag):
+                    state = drag? .translation ?? .zero
+                default: break
+                }
+            }
+            .onEnded { value in
+                self.dragEnabled = false
+            }
+        
+        Image(systemName: "hand.point.right.fill")
+            .foregroundColor(dragEnabled ? .green : .blue)
+            .font(.largeTitle)
+            .offset(offset)
+            .gesture(longPressBeforeDrag)
+    }
+}
+```
 
 ## Chapter 43. 사용자 정의 SwiftUI ProgressView 생성하기
---- 436
---- 01/25 ---
 
+- 이번 장은 사용자 정의 프로그레스 뷰를 생성하여 선형, 원형, 불확정적인 스타일을 포함하여 ProgressView 기반의 인터페이스 구현한다.
+
+### 43.1 ProgressView 스타일
+
+- ProgressView 는 세 가지 스타일로 표시할 수 있다. 수평선, 원형, 회전 애니메이션.
+- 회전 애니메이션(불확정적인 스타일)은 얼만큼 완료되었는지 퍼센트를 알 수 없는 경우에 작업이 진행되고 있음을 표시하는데 유용하다.
+- ProgressViewStyle 프로토콜을 채택함으로써 복잡한 사용자 정의 프로그레스 뷰를 구현할 수 있다.
+
+```swift
+struct ContentView: View {
+    @State private var progress: Double = 1.0
+    
+    var body: some View {
+        VStack {
+            
+            ProgressView("Task 1 Progress", value: progress, total: 100)
+                .progressViewStyle(LinearProgressViewStyle(tint: .red)) // 선형
+            
+            ProgressView("Task 2 Progress", value: progress, total: 100)
+                .progressViewStyle(CircularProgressViewStyle()) // 원형
+
+            ProgressView()             // 불확정적인 ProcessView
+            ProgressView("Working...") // 불확정적인 ProcessView + Text
+
+            ProgressView("Task 5 Progress", value: progress, total: 100)
+                .progressViewStyle(MyCustomProgressViewStyle())     // 커스텀스타일1
+
+            ProgressView("Task 6 Progress", value: progress, total: 100)
+                .progressViewStyle(MyCustomProgressTextViewStyle()) // 커스텀스타일2
+
+            ProgressView("Task 5 Progress", value: progress, total: 100)
+                .progressViewStyle(MyCustomProgressCircleViewStyle()) // 커스텀스타일3
+
+            Slider(value: $progress, in:1...100, step: 0.1)
+        }
+        .padding()
+
+        VStack {
+            ProgressView("Task 1 Progress", value: progress, total: 100)
+            ProgressView("Task 2 Progress", value: progress, total: 100)
+            ProgressView("Task 3 Progress", value: progress, total: 100)
+        }
+        .progressViewStyle(CircularProgressViewStyle()) // 뷰 컨테이너에 적용해, 자식 ProgressView에 모두 적용
+        .padding()
+    }
+}
+
+struct MyCustomProgressViewStyle: ProgressViewStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        ProgressView(configuration)
+            .accentColor(.red)
+            .shadow(color: Color(red: 0, green: 0.7, blue: 0), radius: 5.0, x: 2.0, y: 2.0)
+            .progressViewStyle(LinearProgressViewStyle())
+    }
+}
+
+struct MyCustomProgressTextViewStyle: ProgressViewStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        let percent = Int(configuration.fractionCompleted! * 100)
+        return Text("Task \(percent)% Completed")
+    }
+}
+
+struct MyCustomProgressCircleViewStyle: ProgressViewStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        let degress = configuration.fractionCompleted! * 360
+        let percent = Int(configuration.fractionCompleted! * 100)
+        return VStack {
+            MyCircle(startAngle: .degrees(1), endAngle: .degrees(degress))
+                .frame(width: 100, height: 100)
+                .padding(50)
+            Text("Task \(percent)% Completed")
+        }
+    }
+}
+
+struct MyCircle: Shape {
+    var startAngle: Angle
+    var endAngle: Angle
+    
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.addArc(center: CGPoint(x: rect.midX, y: rect.midY),
+                    radius: rect.width / 2,
+                    startAngle: endAngle,
+                    endAngle: startAngle,
+                    clockwise: true)
+        return path.strokedPath(.init(lineWidth: 100, dash: [5, 3], dashPhase: 10))
+    }
+}
+```
 ## Chapter 44. SwiftUI 차트로 데이터 표시하기
---- 444
+
+1. SwiftUI Charts 는 데이터를 시각적으로 표시할 수 있게 하는 뷰와 수정자로 구성된다.
+2. API는 area, line, point, rectangle, bar, stacked bar 그래프 형태를 지원한다.
+3. Chart 내 각 데이터 포인트는 Mark 뷰의 형태를 취한다. 아래는 지원 Mark 뷰 목록.
+- AreaMark
+- LineMark
+- RectangleMark
+- BarMark
+- PointMark
+- RuleMark
+4. 각 값은 PlottableValue 클래스의 인스턴스로 표현된다.
+
+### 44.6 보간법 변경하기
+
+1. 보간법(interpolation)은 그래프에서 데이터 포인트를 연결하기 위햇 선을 그리는 방법을 말한다.
+2. 보간법은 `interpolationMethod()` 수정자에 마크 선언을 적용하여 변경할 수 있다. 아래를 보간 옵션.
+- linear : 기본 보간법
+- cardinal : 곡선
+- catmullRom : 곡선
+- monotone : 곡선
+- stepStart : 마크 위/아래에서 옆으로 연결
+- stepEnd : 마크 옆에서 위/아래로 연결
+- stepCenter: 마크 옆에서 옆으로 연결
+
+```swift
+import SwiftUI
+import Charts // Charts 라이브러리를 import 한다.
+
+struct ContentView: View {
+    let tempData: [MonthlyTemp] = [
+        MonthlyTemp(month: "Jan", degrees: 50, year: "2021"),
+        MonthlyTemp(month: "Feb", degrees: 43, year: "2021"),
+        MonthlyTemp(month: "mar", degrees: 61, year: "2021"),
+        MonthlyTemp(month: "Jan", degrees: 30, year: "2022"),
+        MonthlyTemp(month: "Feb", degrees: 38, year: "2022"),
+        MonthlyTemp(month: "mar", degrees: 29, year: "2022"),
+    ]
+    
+    var body: some View {
+//        Chart {
+//            AreaMark(x: PlottableValue.value("Month", "Jan"), y: PlottableValue.value("Temp", 50))
+//            AreaMark(x: .value("Month", "Feb"), y: .value("Temp", 43)) // PlottableValue 생략가능
+//            AreaMark(x: .value("Month", "Mar"), y: .value("Temp", 61))
+//        }
+                
+//        Chart {
+//            ForEach(tempData) { data in // ForEach 문을 이용한 표현
+//                AreaMark(x: .value("Month", data.month), y: .value("Temp", data.degrees))
+//            }
+//        }
+        
+        Chart(tempData) { data in
+            AreaMark(x: .value("Month", data.month), y: .value("Temp", data.degrees))
+                .foregroundStyle(by: .value("Year", data.year))
+        }
+        .padding()
+
+        Chart(tempData) { data in // Mark 결합하기. Rectangle + Line
+            RectangleMark(x: .value("Month", data.month), y: .value("Temp", data.degrees))
+                .foregroundStyle(by: .value("Year", data.year)) // 필터링. 연도별로 데이터를 구분하도록 함.
+            LineMark(x: .value("Month", data.month), y: .value("Temp", data.degrees))
+                .interpolationMethod(.catmullRom)
+                .foregroundStyle(by: .value("Year", data.year))
+        }
+        .chartPlotStyle { plotArea in
+            plotArea
+                .background(.gray.opacity(0.3))
+        }
+        .padding()
+    }
+}
+
+struct MonthlyTemp: Identifiable {
+    var id = UUID()
+    var month: String
+    var degrees: Int
+    var year: String
+}
+```
 
 ## Chapter 45. SwiftUI 차트 튜토리얼
---- 449
+
+-- 예제 프로그램 작성
+```swift
+import SwiftUI
+import Charts
+
+struct ContentView: View {
+    let sales = [(channel: "Retail", data: retailSales),
+                 (channel: "Online", data: onlineSales)]
+    
+    var body: some View {
+        Chart {
+            ForEach(sales, id: \.channel) { channels in
+                ForEach(channels.data) { sales in
+                    PointMark(x: .value("Month", sales.month), y: .value("Total", sales.total))
+                        .foregroundStyle(by: .value("Channel", channels.channel))
+                }
+            }
+        }
+        .frame(height: 250)
+        .padding()
+    }
+}
+
+struct SalesInfo: Identifiable {
+    var id = UUID()
+    var month: String
+    var total: Int
+}
+
+var retailSales: [SalesInfo] = [
+    .init(month: "Jan", total: 5),
+    .init(month: "Feb", total: 7),
+    .init(month: "March", total: 6),
+    .init(month: "April", total: 5),
+    .init(month: "May", total: 6),
+    .init(month: "June", total: 3),
+    .init(month: "July", total: 6)
+]
+
+var onlineSales: [SalesInfo] = [
+    .init(month: "Jan", total: 2),
+    .init(month: "Feb", total: 4),
+    .init(month: "March", total: 5),
+    .init(month: "April", total: 2),
+    .init(month: "May", total: 4),
+    .init(month: "June", total: 1),
+    .init(month: "July", total: 4)
+]
+```
 
 ## Chapter 46. SwiftUI DocumentGroup 개요
---- 460
+
+- DocumentGroup 화면을 소개하고 SwiftUI에서 문서 기반 앱(document-based app)을 빌드하기 위하여 어떻게 사용할 수 있는지 설명한다.
+
+### 46.1 앱내에서의 문서
+
+- 내장 앱 파일(Files) 앱은 구글 드라이브와 써드-파티 프로바이더뿐만아니라 로컬 디바이스 파일 시스템 및 iCloud 저장소에 저장된 문서를 찾아보고, 선택하며 관리하는 방법을 제공한다.
+- DocumentGroup 화면의 목적은 새로운 파일을 생성하는 기능 외에도 파일 앱이 제공하는 것과 같은 기능을 SwiftUI 앱에 구축할 수 있게한다.
+
+### 46.3 DocumentGroup
+
+- DocumentGroup 화면(scene)에는 앱 내에서 사용자가 파일과 폴더를 생성, 삭제, 이동, 이름 변경, 선택 등의 기능을 제공하는 데 필요한 대부분의 인프라가 포함된다.
+
+### 46.4 파일 형식 지원 선언하기
+
+- 문서 지원에 대한 구현의 핵심 단계는 앱이 지원하는 파일 형식을 선언하는 것이다.
+  Document Group 사용자 인터페이스는 지원되는 형식의 파일만 선택할 수 있도록 하기 위해 이 정보를 사용한다.
+- 형식이 다른 문서는 탐색 시 회식으로 표시된다.
+
+1. 문서콘텐트 타입 식별자 (document content type identifier)
+- 역방향 도메인 이름의 형식을 취하는 Uniform Type Identifier(UTI) 구문을 사용하여 선언된다.
+- 예. 텍스트 파일 경우. `com.example.plain-text`
+
+2. 핸들러 순위
+- 이 값은 앱과 파일 형식의 관계를 시스템에 선언한다. 만약에 앱이 자체 커스텀 파일 형식을 사용한다면, Owner로 설정해야 하낟.
+  만약에 해당 형식의 파일이 지정된 디폴트 앱으로 열리도록 한다면 Default 로 설정해야 한다.
+  반면에 이러한 형식의 파일을 디폴트 앱이 아니라 앱 내에서 처리할 수 있다면 Alternate 값을 사용해야 한다.
+  마지막으로, 앱이 해당 파일 형시과 관련이 없다면 None을 사용해야한다.
+
+3. 타입 식별자 (type identifier)
+- 이 식별자는 일치하는 특정 데이터 타입들의 목록과 연결되어 있어야 한다.
+- 이러한 타입 식별자는 **애플**에서 제공하는 확장된 내장 타입 목록에서 선택할 수 있으며, 일반적으로 public 이라는 접두사가 붙는다.
+- 예를 들어, 일반 텍스트 문서의 UTI는 public.plain-text 이며 모든 타이븨 이미지는 public.image다.
+- 내장된 각 UTI 타입은 프로그램적으로 타입에 대한 작업을 할 때 사용할 수 있는 UTType에 해당하는 항목이 연결된다.
+  예를 들어, public.plain-text UTI는 plainText라는 UTTyp 인스턴스가 있으며, public.mpeg4move에 대한 UTType인스턴스의 이름은 mpeg4Movie다.
+- 지원하는 UTType 선언의 전체 목록은 URL을 참조한다. https://developer.apple.com/documentation/uniformtypeidentifiers/uttype
+
+4. 파일명 확장자
+- 많은 내장 타입 긱별자는 관련된 파일 타입을 지원하도록 이미 구성되어 있다. 예를 들어 public.png 타입은 .png 파일확장자를 인식한다.
+- 여기에 선언된 확장자는 앱에서 생성된 모든 새로운 문서의 파일명에도 추가된다.
+
+5. 커스텀 타입 문서 콘텐트 식별자
+- 독자적인 데이터 형식으로 작업할 때, 새로운 문서 콘텐트 식별자를 선언할 수 있다.
+  따라서 커스텀 타입에 대한 문서 타입 식별자는 다음과 같이 선언될 수 있다. `com.example.mydata`
+
+6. 익스포트된 타입 식별자 vs 임포트된 타입 식별자
+- 내장 타입(예. plain.image)이 사용되면, 이것을 임포트된 타입 식별자(imported type identifier)라 한다.
+- 반면에 커스텀 타입 식별자는 익스포트된 타입 식별자(exported type identifier)라고 한다.
+  이것은 브라우저가 해당 타입의 파일이 해당 앱과 연결된 것으로 인식할 수 있도록 앱 내에서 생성되어 시스템으로 보내지기(export) 때문이다.
+
+### 46.5 Xcode 에서 파일 타입 지원 구성하기
+- 46.4의 모든 설정은 프로젝트의 Info.plist 파일 내에서 구성된다. 프로젝트 > Tragets별 > info 탭에서 설졍을 변경할 수 있다.
+
+### 46.6 문서 구조
+- *Document.swift 라를 파일이 생성되며, 파일에 대한 파일목록 읽기가능한 파일 목록, 파일내용 읽기, 쓰기를 정의하고, 파일 생성 초기 값을 설정한다.
 
 ## Chapter 47. SwiftUI DocumentGroup 튜토리얼
---- 467
---- 01/26(금)---
+- 예제 프로그램 작성
 
+```swift
+// Demo47ImageDocApp.swfit
+import SwiftUI
+
+@main
+struct Demo47ImageDocApp: App {
+    var body: some Scene {
+        DocumentGroup(newDocument: Demo47ImageDocDocument()) { file in
+            ContentView(document: file.$document)
+        }
+    }
+}
+
+// Demo47ImageDocDocument.swift
+import SwiftUI
+import UniformTypeIdentifiers
+
+extension UTType {
+    static var exampleImage: UTType {
+        UTType(importedAs: "com.tistory.lunadaddy.image")
+    }
+}
+
+struct Demo47ImageDocDocument: FileDocument {
+    var image: UIImage = UIImage()
+
+    init() {
+        if let image = UIImage(named: "cascadefalls") {
+            self.image = image
+        }
+    }
+
+    static var readableContentTypes: [UTType] { [.exampleImage] }
+
+    init(configuration: ReadConfiguration) throws {
+        guard let data = configuration.file.regularFileContents,
+              let decodedImage: UIImage = UIImage(data: data)
+        else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        image = decodedImage
+    }
+    
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        let data = image.pngData()!
+        return .init(regularFileWithContents: data)
+    }
+}
+```
+
+```swift
+// ContentView.swift
+import SwiftUI
+import CoreImage
+import CoreImage.CIFilterBuiltins
+
+struct ContentView: View {
+    @Binding var document: Demo47ImageDocDocument
+    @State private var ciFilter = CIFilter.sepiaTone()
+    let context = CIContext()
+
+    var body: some View {
+        VStack {
+            Image(uiImage: document.image)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .padding()
+            Button(action: {
+                filterImage()
+            }, label: {
+                Text("Filter Image")
+            })
+            .padding()
+        }
+    }
+    
+    func filterImage() {
+        ciFilter.intensity = Float(1.0)
+        let ciImage = CIImage(image: document.image)
+        ciFilter.setValue(ciImage, forKey: kCIInputImageKey)
+        guard let outputImage = ciFilter.outputImage else { return }
+        if let cgImage = context.createCGImage(outputImage, from: outputImage.extent) {
+            document.image = UIImage(cgImage: cgImage)
+        }
+    }
+}
+```
 ## Chapter 48. 코어 데이터와 SwiftUI 소개
---- 476
+
+- 코어 데이터(Core Data)는 스위프트 객체로 데이터 작업을 할 수 있도록 SQLite 데이터베이스(또는 비슷한 환경)에 래퍼(wrapper)를 두는 프레임워크다.
+
+### 48.1 코어 데이터 스택
+
+(SwiftUI앱  )
+(영구 컨테이너 )
+(관리 객체 콘텍스트 / 관리 객체) -> (관리 객체 모델 / 엔티티 디스크립션)
+(영구 저장소 코디테이터)
+(영구 저장소 객체)
+  ⬇️  ⬆️
+(  데이터베이스 )
+
+### 48.2 영구 컨테이이너
+- 영구 컨테이너는 코어 데이터 스택의 생성을 처리하고, 기본적인 데이터 기능에 추가적인 애플리케이션 메서드를 쉽게 추가할 수 있도록 서브클래싱하게 설계되었다.
+- 초기화가 되면, 영구 컨테이너 인스턴스는 관리 객체 콘텍스에 대한 액세스를 제공한다.
+
+### 48.3 관리 객체
+- 관리 객체는 데이터를 저장하기 위해 애플리케이션 코드에서 생성되는 객체다.
+- 관리 객체는 관계형 데이터베이스 테이블의 행 또는 레코드로 생각할 수 있다.
+- 관리 객체는 NSManagedObject 클래스 또는 그 하위 클래스의 인스턴스다.
+- 관리 객체는 관리 객체 콘텍스트에 포함되고 유지된다.
+
+### 48.4 관리 객체 콘텍스트
+- 코어 데이터 기반의 애플리케이션은 영구 저장소와 직업 상호작용하지 않는다.
+- 대신 애플리케이션 코드는 코어 데이터 스택의 관리 객체 콘텍스트 계층에 포함된 관리 객체와 상호작용한다.
+- 이 콘텍스트는 기본 데이터 저장소와 관련하여 객체의 상태를 유지하고 관리 객체 모델에 의해 정의된 관리 객체 간의 관계를 관리한다.
+  기본 데이터베이스와의 모든 상호작용은 콘텍스트가 변경 사항을 저장하라는 지시를 받을 때까지 콘텍스트 내에서 일시적으로 유지되며,
+  이 시점에서 변경 사항은 코어 데이터 스택을 통해 전달되며 영구 저장소에 기록된다.
+
+### 48.5 관리 객체 모델
+
+1. 엔티티라고 하는 개념을 정의하는 관리 객체 모델의 작업으로 데이터 모델을 정의한다.
+2. 엔티티는 속성(이름,주소,전화번화...), 관계, 영구저장소, 가져온 속성, 가져오기 요청이 포함될 수 있다.
+- 관계(relationship)
+- 가져온 속성(fetched property) 이것은 관계를 정의하는 것에 대한 대안을 제공한다.
+- 자져오기 요청(fetch request) 정의된 조건(predicate)을 기반으로 데이터 객체를 검색하기 위해 참조할 수 있게 미리 정의된 쿼리다.
+
+### 48.6 영구 저장소 코디네이터
+- 영구 저장소 코디네이터(persistent store coordinator)는 여러 영구 객체 저장소에 대한 액세스를 조정하는 역할을 한다.
+- 개발자가 영구 저장소와 직접 상호작용하지 않으며, 여러 장소가 필요한 경우 코디네이터는 이러한 저장소를 코어 데이터 스택의 상위 계측에 단일 저장소로 제공한다.
+
+### 48.7 영구 객체 저장소
+1. 영구 객체 저장소(persistent object store)는 코어 데이터를 사용할 때 데이터가 저장되는 기본 저장소 환경을 나타낸다.
+2. 코어 데이터는 3개의 디스크 기반 영구 저장소와 한 개의 메모리 기반 영구 저장소를 지원한다.
+- 디스크 기반 옵션: SQLite(default), XML, 바이너리
+3. 코드는 동일한 Core Data API를 동일하게 호출하여 애플리케이션에 필요한 데이터 객체를 관리한다.
+
+### 48.8 엔티티 디스크립션 정의하기
+- 코어 데이터를 포함하기 위한 옵션으로 새로운 프로젝트를 생성하며, <엔티티이름>.xcdatamodeld 라는 템플릿 파일이 생성된다.
+- Xcode 프로젝트 내비게이터 패널에서 이 파일을 선택하면 엔티티 편집 환경에 모델이 로드된다.
+  Xcode 엔티티 에디터를 사용하면 엔티티 간에 관계를 설정할 수도 있다.
+
+### 48.9 영구 컨테이너 초기화하기
+- 영구 컨테이너는 새로운 NSPersistentContainer 인스턴스를 생성하고, 사용될 모델의 이름을 전달 한 다음, 해당 객체의 `loadPersistentStores()` 메서드를 호출하여 초기화된다.
+```swift
+let persistentContainer: NSPersistentContainer
+
+persistentContainer NSPersistentContainer(name: "DemoData")
+persistentContainer.loadPersistentStores { (storeDescription, error) in 
+    if let error = error as NSError? {
+        fatalError("Container load failded: \(error)")
+    }
+}
+```
+
+### 48.10 관리 객체 콘텍스트 얻기
+- 많은 코어 데이터 메서드들은 인수로 관리 객체 콘텍스트를 필요로 하므로, 엔티티 디스크립션을 정의한 후의 다음 단계는 콘텍스트에 대한 참조를 얻는 것과 관련된 작업니다.
+```swift
+let managedObjectContext = persistentContainer.viewContext
+```
+
+### 48.12 관리 객체 저장하기
+- 관리 객체 인스턴스가 생성되고 저장될 데이터로 구성되면, 관리 객체 콘텍스트의 `save()` 메서드를 사용하여 저장소에 저장할 수 있다.
+```swift
+do {
+    try viewContext.save()
+} catch {
+    let error = error as NSError
+    fatalError("An error occured: \(error))
+}
+```
+
+### 48.13 관리 객체 가져오기
+- 코어 데이터 저장소에 데이터를 가져오는 한 가지 방법은 데이터를 저장할 변수를 선언할 때 `@FetchRequest` 프로퍼티 래버를 사용하는 것이다.
+```swift
+@FetchRequest(entity: Customer.entity(),
+              sortDescriptors: [NSSortDescriptor(key: "name", ascending: true)])
+private var customers: FetchedResults<Customer>
+```
+
+### 48.14 조건에 따라 관리 객체 검색하기
+- 조건(predicate)을 정의하여 관리 객체를 검색할 수 있다.
+```swift
+@FetchRequest(entity: Customer.entity(),
+              sortDescriptors: [],
+              predicate: NSPredicate(format: "name like %@", "John Smith"))
+private var customers: FetchedResults<Customer>
+```
+
+- 일회성 가져오기(fetch) 작업. 
+  1) NSFetchRequest 인스턴스를 생성하고, 
+  2) 엔티터와 3) 조건 설정으로 인스턴스를 구성한 다음, 4) 관리 객체 콘텍스트의 fetch() 메서드에 전달하여 일회성 가져오기 작업을 수행할 수 있다.
+```swift
+@State var matches: [Customer]?
+
+let fetchRequest: NSFetchRequest<Product> = Product.fetchRequest()
+fetchRequest.entity = Customer.entity()
+fetchRequest.predicate = NSPredicate(
+    format: "name LIKE %@", "John Smith"
+)
+matches = try? viewContext.fetch(fetchRequst)
+```
 
 ## Chapter 49. SwiftUI 코어 데이터 튜토리얼
---- 492
+- 예제 프로그램
+```swift
+// (mainapp) Demo49CoreDataApp.swift
+import SwiftUI
+
+@main
+struct Demo49CoreDataApp: App {
+    let persistenceController = PersistenceController.shared
+    
+    var body: some Scene {
+        WindowGroup {
+            ContentView()
+                .environment(\.managedObjectContext, persistenceController.container.viewContext)
+        }
+    }
+}
+```
+
+```swift
+// Persistence.view
+import CoreData
+
+struct PersistenceController {
+    static let shared = PersistenceController()
+    
+    let container: NSPersistentContainer
+    
+    init() {
+        container = NSPersistentContainer(name: "Products")
+        container.loadPersistentStores { storeDescription, error in
+            if let error = error as NSError? {
+                fatalError("Container load failed: \(error)")
+            }
+        }
+    }
+}
+```
+
+```swift
+import SwiftUI
+import CoreData
+
+struct ContentView: View {
+    @State var name: String = ""
+    @State var quantity: String = ""
+    @Environment(\.managedObjectContext) private var viewContext
+    @FetchRequest(entity: Product.entity(), 
+                  sortDescriptors: [NSSortDescriptor(key: "name", ascending: true)])
+    private var products: FetchedResults<Product>
+    
+    var body: some View {
+        NavigationView {
+            VStack {
+                TextField("Product name", text: $name)
+                TextField("Product quantity", text: $quantity)
+                
+                HStack {
+                    Spacer()
+                    Button("Add") {
+                        addProduct()
+                    }
+                    Spacer()
+                    
+                    NavigationLink(destination: ResultView(name: name, viewContext: viewContext)) {
+                        Text("Find")
+                    }
+                    Spacer()
+
+                    Button("Clear") {
+                        name = ""
+                        quantity = ""
+                    }
+                    Spacer()
+                }
+                .padding()
+                .frame(maxWidth: .infinity)
+                
+                List {
+                    ForEach(products) { product in
+                        HStack {
+                            Text(product.name ?? "Not Found")
+                            Spacer()
+                            Text(product.quantity ?? "Not Found")
+                        }
+                    }
+                    .onDelete(perform: deleteProducts)
+                }
+                .navigationTitle("Product Database")
+            }
+            .padding()
+            .textFieldStyle(RoundedBorderTextFieldStyle())
+        }
+    }
+    
+    private func addProduct() {
+        withAnimation {
+            let product = Product(context: viewContext)
+            product.name = name
+            product.quantity = quantity
+            saveContext()
+            name = ""
+            quantity = ""
+        }
+    }
+    
+    private func deleteProducts(offsets: IndexSet) {
+        withAnimation {
+            offsets.map {products[$0] }.forEach(viewContext.delete)
+            saveContext()
+        }
+    }
+    
+    private func saveContext() {
+        do {
+            try viewContext.save()
+        } catch {
+            let error = error as NSError
+            fatalError("An error occurred: \(error)")
+        }
+    }
+}
+
+struct ResultView: View {
+    var name: String
+    var viewContext: NSManagedObjectContext
+    
+    @State var matches: [Product]?
+    
+    var body: some View {
+        return VStack {
+            List {
+                ForEach(matches ?? []) { match in
+                    HStack {
+                        Text(match.name ?? "Not found")
+                        Spacer()
+                        Text(match.quantity ?? "Not found")
+                    }
+                }
+            }
+            .navigationTitle("Results")
+            .task {
+                let fetchRequest: NSFetchRequest<Product> = Product.fetchRequest()
+                fetchRequest.entity = Product.entity()
+                fetchRequest.predicate = NSPredicate(format: "name CONTAINS %@", name)
+                matches = try? viewContext.fetch(fetchRequest)
+            }
+        }
+    }
+}
+```
 
 ## Chapter 50. SwiftUI 코어 데이터와 클라우드킷 저장소 개요
---- 498
+
+- 클라우드킷(CloudKit)은 iCloud 저장소를 사용하여 클라우드 기반의 데이터베이스를 저장하는 방법을 제공하며, 여러 디바이스와 사용자 그리고 앱에 접근할 수 있게 한다.
+- 초기에는 iCloud 기반 데이터베이스를 직접 생성하고, 관리하며 접근하기 위한 코드를 작성할 수 있는 전용 프레임워크로 제공되었지만,
+  요즘 권장하는 방법은 코어 데이터와 함께 클라우드킷을 사용하는 것이다.
+
+### 50.1 클라우드킷 개요
+
+- CloudKit 프레임워크는 애플에서 호스팅하는 iCloud 서버에 대한 접근 권한을 애플리케이션에 제공하고 
+  구조화된 방식으로 데이터와 기타 애셋 타입(비디오, 이미지, 파일, ...)을 저장, 관리 및 검색하기 위한 쉬운 방법을 제공한다.
+- 이것은 사용자가 개인 데이터를 저장하고 여러 디바이스에서 접근할 수 있는 플랫폼을 제공하며, 
+  애플리케이션의 모든 사용자가 공개적으로 사용할 수 있는 데이터를 개발자가 제공할 수도 있게 한다.
+
+### 50.2 클라우드킷 컨테이너
+- 클라우드킷이 활성화된 애플리케이션에는 하나 이상의 컨테이너가 iCloud에 있다.
+- 애플리케이션의 컨테이너는 CKContainer 클래스에 의해 클라우드킷에 표현되며 데이터베이스는 이들 컨테이너 내에 있게 된다.
+
+### 50.3 클라우드킷 공용 데이터베이스
+- 각 클라우드 컨테이너에는 하나의 공용 데이터베이스(public database)가 포함되어 있다.
+- 이것은 애플리케이션의 모든 사용자에게 필요한 데이터가 저장된 데이터베이스다. 
+  예를 들어 지동 앱에는 앱의 모든 사용자게 적용되는 위치 및 경로에 대한 데이터 세트가 있다. (전체 사용자 공유정보)
+  이러한 데이터는 애플리케이션의 클라우드 컨테이너 공용 데이터베이스에 저장된다.
+
+### 50.4 클라우드킷 개인 데이터베이스
+- 개인 데이터베이스(private database)는 각 개발 사용자에게만 공개되는 데이터를 저장하는 데 사용된다.
+- 각 클라우드 컨테이너에는 애플리케이션의 각 사용자에 대한 하나의 개인 데이터베이스가 포함된다.
+
+### 50.5 데이터 저장소 할당량
+- 앱의 공용 클라우드 데이터베이스에 저장된 데이터와 애셋은 앱의 저장소 할당량(storage quota)에 포함된다.
+- 반면, 개인 데이터베이스에 저장된 모든 항목은 해당 사용자의 iCloud 할당량에 포함된다.
+- 애플은 프리 티어(free tier)에 포함되는 초당 쿼리 수와 데이터 전송량에 제한을 둔다. 일반적인 프로젝트에서는 이러한 제한이 발생하지는 않는다.
+
+### 50.6 클라우드킷 레코드
+- 데이터는 레코드 형식으로 공용 데이터베이스와 개인 데이터베이스 모두에 저장된다.
+- 레코드는 CKRecord 클래스로 표현되며 기본적으로 키가 레코드에 저장된 데이터 값을 참조하는 데 사용되는 키-값 쌍의 딕셔너리다.
+- 코어 데이터를 사용하여 클라우드킷을 통해 데이터가 저장되면, 이러한 레코드는 코어 데이터 관리 객체로 표현된다.
+
+### 50.7 클라우드킷 레코드ID
+- 각 클라우드킷 레코드는 CKRecordID 클래스로 표현되는 고유한 레코드 ID가 연결되어 있다.
+- 레코드가 처음 생성될 때 레코드 ID를 지정하지 않으면 클라우드킷 프레임워크에서 자동으로 하나를 제공한다.
+
+### 50.8 클라우드킷 참조
+- 클라우드킷 참조(CloudKit reference)는 CKReference 클래스를 사용하여 구현되며 데이터베이스의 서로 다른 레코드 간의 관계를 구축하는 방법을 제공한다.
+
+### 50.9 레코드 존
+- 클라우드킷 레코드 존(CKRecordZone)은 개인 데이터베이스 내의 레코드 그룹을 연결하기 위한 메커니즘을 제공한다.
+- 레코드를 클라우드에 저장할 때 레코드 존을 지정하지 않으면 대상 데이터베이스의 디폴트 존에 배치된다.
+- 커스텀 존은 개인 데이터베이스에 추가될 수 있으며 관련 레코드를 구성하고 **단일 트랜잭션에서 동시에 여러 레코드에 쓰는 것과 같은 작업**을 수행하는 데 사용될 수 있다.
+- 각 레코드 존은 새로운 레코드를 존에 추가할 때 참조되어야 하는 고유한 레코드존 ID가 연결된다.
+- 공용 데이터베이스 내의 모든 레코드는 공용 디폴트 존에 있는 것으로 간주된다.
+- 클라우드킷 레코드 존은 코어 데이터 영구 컨테이너로 변환된다. 이 때 NSPersistentCloudKitContainer 클래스를 사용한다. (No Cloud는 NSPersistentContainer 클래스)
+
+### 50.10 클라우드킷 콘솔
+- 클라우드킷 콘솔(CloudKit Console)은 클라우드킷 옵션과 애플리케이션 저장소를 관리하기 위한 인터페이스를 제공하는 웹 기반의 포털이다.
+  URL: https://icloud.developer.apple.com/dashboard/
+- 클라우드킷 콘솔을 통해 데이터를 접근할 경우, 개인 사용자 데이터는 대시보드 인터페이스를 사용하여 접근할 수 없다.
+  공용 데이터베이스에 저장된 데이터와 콘솔에 로그인하는 데 사용된 개발자 계정에 속한 개인 데이터베이스만 조회하고 수정할 수 있다.
+
+### 50.11 클라우드킷 공유
+- **앱의 공용 데이터베이스에 포함된 클라우드킷 레코드는 해당 앱의 모든 사용자가 접근할 수 있다.**
+- 그러나 사용자가 개인 데이터베이스에 포함된 특정 레코드를 다른 사용자와 공유하려는 상황이 발생할 수 있다.
+  이것은 클라우드킷 공유(Cloudkit Sharing)의 도입으로 가능해 졌다.
+
+### 50.12 클라우드킷 구독
+- **클라우드킷 구독(CloudKit subscription)을 사용하면 설치된 앱에 속한 클라우드 데이터베이스 내에서 변경이 발생할 때 사용자에게 알려줄 수 있다.**
+- 구독은 표준 iOS 푸시 알림 인프라를 사용하며 레콛가 추가, 업데이트 또는 삭제될 때와 같은 다양한 조건에 따라 발송될 수 있다.
+  특정 조건과 일치하는 레코드의 데이터를 기반으로 알림이 발송하도록 조건을 사용하면 알림을 추가로 세분화할 수 도 있다.
+
+
 ## Chapter 51. SwiftUI 코어 데이터와 클라우드킷 튜토리얼
---- 510
---- 01/27(토) ---
+
+- Xcode SwiftUI 프로젝트에 클라우드킷 지원을 추가하는 첫 번째 단계는 iCloud 기능을 추가하여 클라우드킷 서비스와 원격 알림을 모두 활성화하고,
+  앱과 연결된 데이터베이스를 저장하도록 컨테이너를 구성하는 것이다.
+- 코어 데이터에서 클라우드킷으로는 마이그레이션은 NSPersistentContainer 대신 NSPersistentCloudKitContainer를 사용핟록 코드를 변경하고 프로젝트를 다시 빌드하기만 하면 된다.
+- 클라우드킷 데이터베이스는 클라우드킷 콘솔 내에서 쿼리, 수정, 관리 및 모니터링할 수 있다.
 
 ## Chapter 52. 시리킷 소개
---- 518
+
+-- 시리킷의 목적은 시리 인터페이스를 통해 음성 명령으로 애플리케이션 기능의 핵심 영역에 접근할 수 있도록 하는 것이다.
+
+### 52.1 시리와 시리킷
+- 시리는 사용자의 요청을 인텐트(intent)로 패키징하여 iOS앱에 전달한다. 
+- 인텐트에 필요한 모든 데이터가 포함되면 앱은 요청된 작업을 수행하고 결과를 시리에게 알린다.
+  이러한 결과는 시리 또는 iOS 앱 자체 내에서 표시된다.
+
+### 52.2 시리킷 도메인
+1. 시리는 다음 도메인 중 하나 이상에 해당하는 작업을 수행할 때만 앱에서 사용할 수 있다.
+- 메시징
+- 메모 및 목록
+- 결제
+- 비주얼 코드
+- 사진
+- 운동
+- 승차 예약
+- 카플레이
+- 자동차 제어
+- VoIP 통화
+- 레스토랑 예약
+- 미디어
+2. 만약 앱에 일치하는 도메인이 없다면, 커스텀 시리 단축어(Siri shortcut)를 사용하여 시리킷을 통합할 수 있다.
+
+### 52.3 시리 단축어
+- 시리 단축어는 앱 내에서 자주 수행되는 활동을 단축어로 저장하고 미리 정의된 구문을 사용하여 시리를 통해 트리거되게 할 수 있다.
+- 사용자 행동 패턴을 기반으로 시리는 사용자가 디바이스 홈 화면에서 아래쪽으로 스와이핑 동작을 할 때 나타나는 시리 제안(siri suggestion)과 검색 패털에서 사용자에게 단축어를 제안한다.
+
+### 52.4 시리킷 인텐트
+- 각 도메인은 미리 정의된 작업, 즉 인텐트 세트가 앱에 의해 수행되도록 사용자가 요청하게 한다.
+- '인텐트'는 시리가 인식하고 시리킷이 통합된 iOS 앱에 의해 수행될 수 있는 '특정 작업'을 나타낸다.
+- 시리 단축어의 경우, 시리킷 통합은 앱이 시리와 어떻게 상호작용하는지를 설명하는 인텐트 정의 파일과 결된 커스텀 인텐트를 사용하여 구현된다.
+
+### 52.5 시리킷 통합의 작동 방식
+- 시리 통합은 iOS 익스텐션 메커니즘을 통해 수행된다.
+1. 시리킷은 두 가지 유형의 익스텐션을 제공하면 그 중 핵심은 인텐트 익스텍션이다.
+-  이 익스텐션에는 Intents 프레임워크의 INExtension 클래스로 부터 서브클래싱된 인텐트 핸들러가 있으며,
+  사용자와 통신하는 과정에서 시리가 호출하는 메서드가 포함되어 있다.
+- 시리가 사용자로부터 필요한 모든 정보를 수집했는지 확인하고 인테트에 정의된 작업을 실행하는 것은 **인텐트 핸들러**가 담당한다.
+
+2. 두 번째 익스텐션 유형은 UI 익스텐션이다. 이 익스텐션은 선택 사항이며 스토리보드 파일과 IntentViewController 클래스의 하위 클래스로 구성된다.
+- 이 익스텐션이 제공되었다면 사용자에게 정보를 표시할 때 시리는 이 UI를 사용한다.
+
+3. 사용자가 시리를 통해 앱을 요청할 때 가장 먼저 호출하는 메소드는 인텐트 익스텐션에 포함된 인텐트 핸들러 클래스의 `handler(forIntent:)` 메소드다.
+- 이 메서드는 현재 인텐트 객체에 전달되고 인테트 핸들러로 사용할 객체에 대한 참조를 반환한다.
+- 인텐트 핸들러는 처리할 수 있는 인텐트 타입을 선언하고, 이러한 특정 인텐트 타입을 지워하는 데 필요한 모든 프로토콜 메서드를 구현해야 한다.
+
+```
+시리 => 인텐트 핸들러
+    -> 1. 매개변수 확인
+    -> 2. 인텐트 확인
+    -> 3. 인텐트 처리
+```
+
+### 52.6 인텐트 매개변수 확인하기
+- 각 인텐트 도메인 타입에는 앱에서 수행할 작업에 대한 세부 정보를 제공하는 데 사용되는 매개변수 그룹이 연결되어 있다.
+  많은 매개 변수가 필수지만 일부는 선택사항이다.
+- 시리가 이미 매개변수를 가지고 있다면 매개변수가 유효한지를 확인하도록 인텐트 핸들러에게 요청한다.
+  시리에 매개변수 값이 아직 없다면, 인텐트 핸들러에게 매개변수가 필요한지 묻는다. 
+  만약 매개변수가 필요하다면 시리는 사용자에게 정보 제공을 요청한다.
+
+ ### 52.7 확인 메서드
+- 확인(confirm) 메서드는 익스텐션 핸들러 내에서 구현되며 모든 인텐트 매개변수가 확인되면 시리에 의해 호출된다.
+- 이 메서드는 인텐트 핸들러가 인텐트를 처리할 준비가 되었는지 확인할 수 있는 기회를 제공한다.
+  확인 메서드가 준비가 된 상태라고 보고하면 시리는 핸들 메서드를 호출한다.
+
+### 52.8 핸들 메서드
+- 핸들(handle) 메서드는 인텐트와 관련된 활동이 수행되는 곳이다. 작업이 완료되면 응답이 시리에 전달되다.
+  응답형식은 수행된 활동 타입에 따라 다르다.
+- 핸들 메서드는 continueInApp 응답을 반환할 수 도 있다. 이것은 작업의 나머지 부분이 메인 앱 내에서 수행될 것임을 시리에게 알려준다.
+  이 응답을 받으면 시리는 NSUserActivity 객체를 전달하여 앱을 시작한다.
+- NSUserActivity는 앱의 상태를 저장하고 복원할 수 있게 해주는 클래스다. 
+  iOS 10 이상에서 NSUserActivity 클래스에는 앱 상태와 함께 NSInteraction 객체를 저장할 수 있는 추가 속성이 있다.
+  시리는 이 interaction 속성을 사용하여 세션에 대한 NSInteraction 객체를 저장하고 메인 iOS 앱에 전달한다.
+- 그러면 interaction 객체에는 활동을 계속 처리하기 위해 앱이 추출할 수 있는 인텐트 객체의 복사본이 포함된다.
+  커스텀 NSUserActivity 객체는 익스텐션으로 생성되며 iOS앱에 전달될 수 있다. 커스텀 객체가 지정되지 않았다면 시리킷은 디폴토르 하나를 생성한다.
+- 인텐트 핸들러 클래스는 서로 다른 인텐트 타입을 처리하기 위해 하나 이상의 핸들 메서드를 포함할 수 있다.
+  예를 들어, 메시징 앱은 메시지 보내기 및 메시지 검색 인텐트에 대해 서로 다른 핸들러 메서드를 갖는다.
+
+### 52.9 커스텀 어휘
+1. 시리는 다양한 언어의 어휘를 폭 넓게 알고 있다. 하지만 앱 또는 앱 사용자가 의미나 맥락인 없는 특정 단어 또는 용어를 시리에 사용할 수도 있다.
+  이러한 용어를 시리가 인식하도록 앱에 추가할 수 있다. 이런 커스텀 어휘용어(custom vocabulary term)는 사용자별이나 전역으로 분류된다.
+2. 사용자별 용어(User specific term)는 개별 사용자에게만 적용되는 용어다.
+  사용자별 용처는 `NSVocabulary` 클래스의 `setVocabularyStrings(oftype:)` 메서드를 사용하여 애플리케이션 런타임 시 메인 iOS 앱 내에서 시리에 등록되며,
+  먼저 나열된 가장 일반적으로 사용되는 용어가 포함된 정렬된 목록 형식으로 제공되어야 한다.
+3. 사용자별 커스텀 용어는 연락처 및 연락처 그룹 이름, 사진 태그 및 앨범 이름, 운동 이름, CarPaly 자동차 프로핌 이름에 대해서만 지정할 수 있다.
+   순서가 지정된 목록과 함께 `setVocabularyString(oftype:)` 메서드를 호출할 때 지정된 카테고리 타입은 다음 주 하나여야 한다.
+- contactName
+- contactGroupName
+- photoTag
+- photoAlbumName
+- workoutActivityName
+- carProfileName
+4. 전역 어휘 용어(global vocabulary term)는 앱에 따라 다르지만 모든 앱 사용자에게 적용된다.
+   이러한 용어는 AppInventoryVocabulary.plist 라는 속성 목록 파일 형식으로 앱 번들과 함께 제공된다.
+   이들 용어는 운동 및 차량 공유 이름에만 적용된다.
+
+### 52.10 시리 사용자 인터페이스
+- 각 시리킷 도메인에는 사용자에게 정보를 전달하는 데 디폴트로 사용되는 표준 사용자 인터페이스 레이아웃이 있다.
+- 이 주제는 60.5 '구성 인텐트 UI 커스터마이징하기'에서 다룬다.
+- 시리 단축어의 경우 단축어가 사용될 때 시리 내에 나타나는 사용자 인터페이스를 커스텀하기 위해 동일한 기술이 사용될 수 있다.
 
 ## Chapter 53. SwiftUI 시리킷 메시징 익스텐션 튜토리얼
--- 526
+- 예제 프로그램
+
+--- 526
 
 ## Chapter 54. 시리 단축어 앱 통합 개요
 --- 533
@@ -2983,6 +3897,7 @@ struct ContentView: View {
 
 ## Chapter 58. 위젯킷 크기 지원
 --- 585
+
 ## Chapter 59. SwiftUI 위젯키 딥링크 튜토리얼
 --- 592
 --- 01/31 ---
