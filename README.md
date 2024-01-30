@@ -3876,10 +3876,66 @@ struct ResultView: View {
 ## Chapter 53. SwiftUI 시리킷 메시징 익스텐션 튜토리얼
 - 예제 프로그램
 
---- 526
-
 ## Chapter 54. 시리 단축어 앱 통합 개요
---- 533
+
+### 54.1 시리 단축어의 개요
+
+- 시리 단축어를 사용하면 사용자가 제공한 문구를 통해 시리를 사용하여 앱 내에서 일반적으로 수행되는 작업을 호출할 수 있다.
+- 단축어가 추가되면, 앱 내에서 작업을 완료하는 데 필요한 모든 매개변수 값과 인텐트 핸들러가 보고한 상태에 따라 시리가 응답해야 하는 방식을 정의 하는 템플릿이 단축어에 포함된다.
+- 단축어는 커스텀 인텐트 익스텐션을 생성하고 인텐트, 매개변수 그리고 응답에 대한 모든 정보를 포함하는 인텐트 정의 파일을 구성하여 구현된다. (SiriKit intent definition)  
+- 이 정보를 통해 Xcode는 단축어를 구현하는 데 필요한 모든 클래스 파일을 생성한다.
+- 호스트 앱내의 Add to Siri 버튼을 통하거나 제안된 단축어를 제공하는 앱을 통해 단축얼르 시리에 추가할 수 있다.
+- 기부된 단축어 목록은 iOS의 단축어(shortcut) 앱에서 확인할 수 있다.
+
+### 54.2 인테트 정의 파일 소개
+1. Xcode > File > New > File - Resource 섹션에서 SiriKit Intent Definition File 옵션을 선택하여 인텐트 정의 파일을 Xcode 프로젝트에 추가한다.
+- B) "Custeom Intents" 섹션 : order, buy, do, open, search 같은 카테고리를 포함하는 옵션 목록 선택.
+- C) "Parameters" 섹션 : 인턴트에 전달할 매개변수를 구성한다.
+- E) "Shortcut App" 섹션 : 단축어의 다양한 변형을 구성한다. 단축어 유형은 그 단축어 내에서 사용되는 매개변수의 조합으로 정의된다.
+- F) Response Templates : 인텐트 실행 결과에 따라 사용자에게 응답하는 방법을 정의한다.
+2. 인테트 정의 파일이 구성되면 Xcode는 익스텐션의 인텐트 핸들러 코드 내에서 사용할 준비가 된 일련의 클래스 파일을 자동을 생성한다.
+
+### 54.3 자동으로 생성된 클래스
+1. OrderFood 라는 커스텀 인텐트가 정의 파일에 추가되었다고 가정하면, 다음의 클래스가 Xcode에 자동으로 생성된다.
+- OrderFoodIntent : 정의 파일에 선언된 모든 매개변수를 캡슐화하는 인텐트 객체다. 이 클래스의 인스턴스는 현재의 단축어에 대한 적절한 매개변수 값으로 구성성된 
+  익스텐션 인텐트 핸들러의 handler(), handle(), confirm() 메서드로 시리에 의해 전달될 것이다.
+- OrderIntentHandling : 음식 주문 인텐트를 완전히 처리하기 위해 인텐트 핸들러가 준수해야 하는 프로토콜을 정의한다.
+- OrderIntentResponse : 인텐트 정의 파일의 인텐트에 대해 선언된 응답 코드, 템플릿, 매개변수를 캡슐화하는 클래스다. 
+  이 클래스를 사용하여 응답코드와 매개변수 값을 시리에 반환함으로 적절한 응답이 사용자에게 전달될 수 있다.
+
+### 54.4 단축어 기부하기
+- 대체로 앱은 사용자가 일반적인 작업을 수행할 때 단축어를 제공한다.
+  이러한 기부(donation)는 사용자의 작업을 단축어로 자동 전환하지 않지만 iOS 단축어 앱내에서 제안된 단축어로 포함된다.
+- 단축어 인텐트 객체로 초기화된 `INInteraction` 인스턴스의 donate() 메서드를 호출하여 기부가 이루어 진다.
+- 기부된 단축어 목록은 iOS의 단축어(shortcut) 앱에서 확인할 수 있다.
+
+```swift
+let intent = OrderFoodIntent()
+
+intent.menuItem = "Cheeseburge"
+intent.quantity = 1
+intent.suggestedInvocationPhrase = "Order Lunch"
+
+let interaction = INInteraction(intent: intent, reponse: nil)
+interaction.donate { (error) in
+    if error != nil {
+        // 기부 실패 처리
+    }
+}
+```
+
+### 54.5 Add to Siri 버튼
+- Add to Siri 버튼을 상요하면 앱 내에서 단축어를 시리에 추가할 수 있게 해준다.
+  여기에는 `INUIAddVoiceShortcutButton` 인스턴스를 생성하는 코드 작성과 구성된 단축어 매개변수가 있는 단축어 인텐트 객체로 초기화한 다음,
+  사용자 인터페이스 뷰에 추가하는 작업이 포함된다.
+  그런 다음, 버튼을 클릭할 때 호출할 타킷 메서드를 버튼에 추가한다.
+- iOS 16 현재, Add to Siri 버튼이 SwiftUI에 직접 통합되지 않아 UIKit으로 구현하여 SwiftUI 프로젝트에 통합해야 한다.
+
+------------
+------------
+------------
+
+-- 534
 
 ## Chapter 55. SwiftUI 시리 단축어 튜토리얼
 --- 555
